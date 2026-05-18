@@ -5,21 +5,22 @@ import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.example.myapplication.core.network.ApiClient
+import com.example.myapplication.core.network.ApiResult
 import com.example.myapplication.core.network.Session
 import com.example.myapplication.guardian.main.GuardianMainActivity
+import com.example.myapplication.guardian.onboarding.GuardianChatActivity
 import com.example.myapplication.guardian.onboarding.LoginActivity
 import com.example.myapplication.guardian.onboarding.WelcomeActivity
 import com.example.myapplication.user.UserStartActivity
+import org.json.JSONObject
 
 class RoleSelectActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 1. 세션 초기화
-        Session.init(applicationContext)
-
-        // 2. 이미 역할이 선택된 사용자라면 선택 과정을 건너뛰고 즉시 분기
+        // 이미 역할이 선택된 사용자라면 선택 과정을 건너뛰고 즉시 분기
         if (Session.hasRole()) {
             routeBySessionState(Session.role)
             return
@@ -58,27 +59,51 @@ class RoleSelectActivity : AppCompatActivity() {
      * 역할 및 세션 상태(로그인, 온보딩)에 따른 지능형 라우팅
      */
     private fun routeBySessionState(role: String) {
-        val nextIntent = if (role == Session.ROLE_USER) {
-            // [사용자 모드]
-            Intent(this, UserStartActivity::class.java)
-        } else {
-            // [보호자 모드] 세션 상태에 따른 세부 분기
-            when {
-                // 로그인 완료 + 초기 설정(온보딩) 완료 -> 메인 화면
-                Session.isLoggedIn() && Session.isOnboarded ->
-                    Intent(this, GuardianMainActivity::class.java)
-
-                // 로그인 완료 + 초기 설정 미완료 -> 환영/설정 화면
-                Session.isLoggedIn() && !Session.isOnboarded ->
-                    Intent(this, WelcomeActivity::class.java)
-
-                // 로그인 안 됨 -> 로그인 화면
-                else ->
-                    Intent(this, LoginActivity::class.java)
-            }
+        if (role == Session.ROLE_USER) {
+            startActivity(Intent(this, UserStartActivity::class.java))
+            finish()
+            return
         }
 
-        startActivity(nextIntent)
-        finish() // 현재 RoleSelectActivity는 스택에서 제거
+        // 보호자 모드
+        when {
+            Session.isLoggedIn() && Session.isOnboarded -> {
+                startActivity(Intent(this, GuardianMainActivity::class.java))
+                finish()
+            }
+            Session.isLoggedIn() && !Session.isOnboarded -> {
+                // 서버에서 연동 유저 확인 — 온보딩 중간에 앱 종료된 경우 대비
+                checkLinkedUserAndRoute()
+            }
+            else -> {
+                startActivity(Intent(this, LoginActivity::class.java))
+                finish()
+            }
+        }
+    }
+
+    private fun checkLinkedUserAndRoute() {
+        ApiClient.get("/v1/user/link/${Session.guardianId}") { result ->
+            runOnUiThread {
+                val next = if (result is ApiResult.Success) {
+                    try {
+                        val arr = JSONObject(result.data).getJSONArray("result")
+                        if (arr.length() > 0) {
+                            Session.userIdx = arr.getJSONObject(0).getInt("userIdx")
+                            Session.isOnboarded = true
+                            Intent(this, GuardianMainActivity::class.java)
+                        } else {
+                            Intent(this, WelcomeActivity::class.java)
+                        }
+                    } catch (e: Exception) {
+                        Intent(this, WelcomeActivity::class.java)
+                    }
+                } else {
+                    Intent(this, WelcomeActivity::class.java)
+                }
+                startActivity(next)
+                finish()
+            }
+        }
     }
 }

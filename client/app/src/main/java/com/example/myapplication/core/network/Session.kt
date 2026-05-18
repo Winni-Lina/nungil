@@ -76,5 +76,9 @@ object Session {
     fun hasRole() = role.isNotEmpty()
     fun isLoggedIn() = (prefs?.contains(KEY_ID) == true) && guardianId.isNotEmpty()
 
-    fun logout() = prefs?.edit()?.clear()?.apply()
+    fun logout() {
+        val savedRole = role
+        prefs?.edit()?.clear()?.apply()
+        role = savedRole
+    }
 }
