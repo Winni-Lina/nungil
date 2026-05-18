@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#FFFFFF">
+
+    <!-- 툴바 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="8dp">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_media_previous"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="뒤로"/>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="사용자 연동"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:paddingStart="8dp"/>
+
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#E0E0E0"/>
+
+    <!-- 안내 텍스트 -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="버튼을 누르면 새로운 사용자(피보호자)가 생성되고\nQR 코드가 나타납니다. 사용자 기기로 스캔하세요."
+        android:textSize="14sp"
+        android:textColor="#666666"
+        android:padding="20dp"
+        android:lineSpacingMultiplier="1.4"/>
+
+    <!-- QR 이미지 -->
+    <ImageView
+        android:id="@+id/ivGuardianQr"
+        android:layout_width="280dp"
+        android:layout_height="280dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="16dp"
+        android:visibility="gone"
+        android:contentDescription="QR 코드"/>
+
+    <!-- 로딩 -->
+    <ProgressBar
+        android:id="@+id/pbQrLoading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="40dp"
+        android:visibility="gone"/>
+
+    <!-- 상태 텍스트 -->
+    <TextView
+        android:id="@+id/tvQrStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textSize="14sp"
+        android:textColor="#444444"
+        android:padding="16dp"/>
+
+    <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1"/>
+
+    <!-- 다음 버튼 (온보딩 모드, QR 생성 후 표시) -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnNext"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:text="다음 (과업 등록하기)"
+        android:textSize="16sp"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginBottom="8dp"
+        android:visibility="gone"
+        app:cornerRadius="12dp"
+        xmlns:app="http://schemas.android.com/apk/res-auto"/>
+
+    <!-- 연동 버튼 -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnLinkUser"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:text="새 사용자 연동하기"
+        android:textSize="16sp"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginBottom="20dp"
+        app:cornerRadius="12dp"
+        app:backgroundTint="#6366F1"
+        xmlns:app="http://schemas.android.com/apk/res-auto"/>
+
+</LinearLayout>

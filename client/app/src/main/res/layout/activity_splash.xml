@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#FFFFFF">
+
+    <!-- TODO: res/drawable/nungil_logo.png 넣기 -->
+    <ImageView
+        android:layout_width="380dp"
+        android:layout_height="380dp"
+        android:src="@drawable/nungil_logo"
+        android:scaleType="fitCenter"/>
+
+</LinearLayout>

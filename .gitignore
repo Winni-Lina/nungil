@@ -1,0 +1,27 @@
+/client/*.iml
+/client/.gradle
+/client/local.properties
+/client/.idea/caches
+/client/.idea/libraries
+/client/.idea/modules.xml
+/client/.idea/workspace.xml
+/client/.idea/navEditor.xml
+/client/.idea/assetWizardSettings.xml
+/client/.DS_Store
+/client/build
+/client/app/build
+/client/app/.gradle
+/client/captures
+/client/.externalNativeBuild
+/client/.cxx
+/client/local.properties
+
+# Vosk Model (100MB 초과 파일 방지)
+**/src/main/assets/model-ko/
+*.fst
+*.lmdas
+
+# OS 관련 임시 파일
+/client/Thumbs.db
+
+/client/app/google-services.json

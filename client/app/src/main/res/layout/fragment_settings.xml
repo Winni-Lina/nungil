@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F5F5F5">
+
+    <!-- 헤더 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:background="#FFFFFF">
+
+        <TextView
+            android:id="@+id/tvGuardianName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="보호자"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#333333"/>
+
+        <TextView
+            android:id="@+id/tvGuardianId"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textColor="#888888"
+            android:layout_marginTop="2dp"/>
+
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="8dp"
+        android:background="#F0F0F0"/>
+
+    <!-- 화이트리스트 섹션 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="등록된 과업 (화이트리스트)"
+            android:textSize="13sp"
+            android:textColor="#888888"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="12dp"/>
+
+        <TextView
+            android:id="@+id/btnAddTask"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="+ 추가"
+            android:textSize="13sp"
+            android:textColor="#6366F1"
+            android:textStyle="bold"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp"
+            android:layout_marginEnd="12dp"
+            android:background="@android:color/transparent"
+            android:clickable="true"
+            android:focusable="true"/>
+
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/pbWhitelist"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:visibility="gone"/>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvWhitelist"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#FFFFFF"/>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="8dp"
+        android:background="#F0F0F0"/>
+
+    <!-- 알림 설정 섹션 -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="알림 설정"
+        android:textSize="13sp"
+        android:textColor="#888888"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="12dp"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:background="#FFFFFF">
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="일정 미수행 알림"
+            android:textSize="15sp"
+            android:textColor="#333333"/>
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchNotifSchedule"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:background="#FFFFFF">
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="반복 질문 알림"
+            android:textSize="15sp"
+            android:textColor="#333333"/>
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchNotifRepeat"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:background="#FFFFFF">
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="방해금지 시간대"
+            android:textSize="15sp"
+            android:textColor="#333333"/>
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchDnd"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvDndTime"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="22:00 ~ 08:00"
+        android:textSize="13sp"
+        android:textColor="#6366F1"
+        android:paddingHorizontal="16dp"
+        android:paddingBottom="12dp"
+        android:background="#FFFFFF"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true"/>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="8dp"
+        android:background="#F0F0F0"/>
+
+    <!-- 사용자 연동 버튼 -->
+    <Button
+        android:id="@+id/btnLinkUser"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:text="사용자 연동 (QR)"
+        android:textSize="15sp"
+        android:textColor="#6366F1"
+        android:backgroundTint="#FFFFFF"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="8dp"/>
+
+    <!-- 피보호자 정보 등록 -->
+    <Button
+        android:id="@+id/btnUserInfo"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:text="피보호자 정보 등록"
+        android:textSize="15sp"
+        android:textColor="#333333"
+        android:backgroundTint="#FFFFFF"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="4dp"/>
+
+    <!-- 로그아웃 버튼 -->
+    <Button
+        android:id="@+id/btnLogout"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:text="로그아웃"
+        android:textSize="15sp"
+        android:textColor="#FF5252"
+        android:backgroundTint="#FFFFFF"
+        android:layout_margin="16dp"/>
+
+</LinearLayout>
