@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nungil.domain.user.NungilUserMapper">
+
+    <resultMap id="NungilUserResultMap" type="com.nungil.domain.user.NungilUserVO">
+        <id     property="id"          column="id"/>
+        <id     property="idx"         column="idx"/>
+        <result property="specialNote" column="special_note"/>
+        <result property="whiteList"   column="white_list"/>
+        <result property="userName"    column="user_name"/>
+        <result property="userPhone"   column="user_phone"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.nungil.domain.user.NungilUserVO">
+        INSERT INTO NUNGIL_USER (id, idx, special_note, white_list)
+        VALUES (#{id}, #{idx}, #{specialNote,jdbcType=CLOB}, #{whiteList,jdbcType=CLOB})
+    </insert>
+
+    <select id="getNextIdx" resultType="int">
+        SELECT NVL(MAX(idx), 0) + 1 FROM NUNGIL_USER WHERE id = #{id}
+    </select>
+
+    <select id="findByGuardianId" resultMap="NungilUserResultMap">
+        SELECT * FROM NUNGIL_USER WHERE id = #{id} ORDER BY idx
+    </select>
+
+    <select id="findByIdAndIdx" resultMap="NungilUserResultMap">
+        SELECT * FROM NUNGIL_USER WHERE id = #{id} AND idx = #{idx}
+    </select>
+
+    <update id="updateWhiteList">
+        UPDATE NUNGIL_USER SET white_list = #{whiteList}
+        WHERE id = #{id} AND idx = #{idx}
+    </update>
+
+    <update id="updateSpecialNote">
+        UPDATE NUNGIL_USER SET special_note = #{specialNote}
+        WHERE id = #{id} AND idx = #{idx}
+    </update>
+
+    <update id="updateUserInfo">
+        UPDATE NUNGIL_USER SET user_name = #{userName}, user_phone = #{userPhone}
+        WHERE id = #{id} AND idx = #{idx}
+    </update>
+
+</mapper>

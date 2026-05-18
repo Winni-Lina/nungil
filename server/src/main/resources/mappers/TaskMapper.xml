@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nungil.domain.task.TaskMapper">
+
+    <resultMap id="TaskResultMap" type="com.nungil.domain.task.TaskVO">
+        <id     property="taskId"  column="task_id"/>
+        <result property="name"    column="name"/>
+        <result property="process" column="process"/>
+    </resultMap>
+
+    <select id="findByKeyword" resultMap="TaskResultMap">
+        SELECT * FROM TASK
+        WHERE name LIKE '%' || #{keyword} || '%'
+    </select>
+
+    <select id="findById" resultMap="TaskResultMap">
+        SELECT * FROM TASK WHERE task_id = #{taskId}
+    </select>
+
+    <select id="findAll" resultMap="TaskResultMap">
+        SELECT * FROM TASK ORDER BY name
+    </select>
+
+</mapper>
