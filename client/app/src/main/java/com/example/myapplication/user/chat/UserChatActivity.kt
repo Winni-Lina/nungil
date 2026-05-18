@@ -1,4 +1,5 @@
 package com.example.myapplication.user.chat
+
 import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -78,6 +79,18 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private var shouldLaunchCamera = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    // 1. 자동 갱신용 핸들러 및 루나블 추가
+    private val refreshHandler = Handler(Looper.getMainLooper())
+    private val refreshRunnable = object : Runnable {
+        override fun run() {
+            if (::USER_ID.isInitialized) {
+                scheduleManager.syncSchedulesFromDB(USER_ID, USER_IDX)
+                Log.d("ScheduleRefresh", "30분 주기 자동 일정 갱신 완료")
+            }
+            refreshHandler.postDelayed(this, 30 * 60 * 1000L) // 30분마다 반복
+        }
+    }
+
     private var userSpecialNote = ""
     private var whitelistTaskNames = listOf<String>()
 
@@ -150,6 +163,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                 whitelistTaskNames = userInfo.whitelistTaskNames
             }
         }.start()
+        // 최초 1회 즉시 실행
         scheduleManager.syncSchedulesFromDB(userId = USER_ID, userIdx = USER_IDX)
     }
 
@@ -250,7 +264,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         }
 
         val finalText = if (text != null && !isScheduleMode) "${buildUserContext()}\n\n사용자 질문: $text" else text
-        if (finalText != null) conversationHistory.add(UserChatLog("user", finalText))
+        if (text != null) conversationHistory.add(UserChatLog("user", text))
 
         val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
         val textMt = "text/plain; charset=utf-8".toMediaTypeOrNull()
@@ -275,12 +289,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string() ?: ""
-
-                // [로그 추가] 서버 응답 원본 확인
-                Log.d("ServerCheck", "── 서버 응답 수신 ──")
-                Log.d("ServerCheck", "코드: ${response.code}")
-                Log.d("ServerCheck", "본문: $body")
-                Log.d("ServerCheck", "──────────────────")
+                Log.d("ServerCheck", "── 서버 응답 수신 ──\n코드: ${response.code}\n본문: $body\n──────────────────")
 
                 runOnUiThread {
                     loadingBar.visibility = View.GONE
@@ -318,8 +327,8 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     for (i in 0 until suggestArray.length()) suggests.add(suggestArray.getString(i))
                 }
 
-                if (isScheduleMode && scheduleSteps.isNotEmpty()) {
-                    val nextLabel = if (currentStepIndex + 1 < scheduleSteps.size) "다음 단계로" else "완료"
+                if (isScheduleMode) {
+                    val nextLabel = if (scheduleSteps.isNotEmpty() && currentStepIndex + 1 < scheduleSteps.size) "다음 단계로" else "완료"
                     suggests.add(0, nextLabel)
                 }
 
@@ -446,7 +455,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private fun proceedToNextStep() {
         if (!isScheduleMode) return
         currentStepIndex++
-        if (scheduleSteps.isNotEmpty() && currentStepIndex >= scheduleSteps.size) {
+        if (scheduleSteps.isEmpty() || currentStepIndex >= scheduleSteps.size) {
             finishSchedule()
             return
         }
@@ -462,26 +471,39 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         ttsManager.speak(doneMsg)
     }
 
+    // 2. onStart 수정 (리시버 등록 및 갱신 로직 시작)
     override fun onStart() {
         super.onStart()
         if (::voskManager.isInitialized) voskManager.startListening()
+
+        // 알림 리시버 등록 (안드로이드 버전 대응)
         val filter = IntentFilter(ScheduleAlarmReceiver.ACTION_SCHEDULE_ALERT)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(scheduleReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(scheduleReceiver, filter)
+        ContextCompat.registerReceiver(this, scheduleReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+
+        // 앱 진입/복귀 시 즉시 갱신 및 30분 주기 예약 시작
+        if (::USER_ID.isInitialized) {
+            scheduleManager.syncSchedulesFromDB(USER_ID, USER_IDX)
+            refreshHandler.removeCallbacks(refreshRunnable) // 중복 방지
+            refreshHandler.postDelayed(refreshRunnable, 30 * 60 * 1000L)
         }
     }
 
+    // 3. onStop 수정 (갱신 핸들러 중단)
     override fun onStop() {
         super.onStop()
         if (::voskManager.isInitialized) voskManager.stopListening()
+
+        // 리시버 해제
         try { unregisterReceiver(scheduleReceiver) } catch (e: Exception) { }
+
+        // 자동 갱신 중단 (배터리 보호)
+        refreshHandler.removeCallbacks(refreshRunnable)
     }
 
     override fun onDestroy() {
         super.onDestroy()
         mainHandler.removeCallbacksAndMessages(null)
+        refreshHandler.removeCallbacksAndMessages(null) // 핸들러 완전 정리
         if (::voskManager.isInitialized) voskManager.stopListening()
         if (::voiceRecorder.isInitialized) voiceRecorder.release()
         if (::ttsManager.isInitialized) ttsManager.release()

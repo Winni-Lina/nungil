@@ -133,7 +133,6 @@ class ScheduleFragment : Fragment() {
 
         // 초기 날짜 표시
         refreshDateDisplay()
-        viewModel.loadSchedules()
     }
 
     private fun refreshDateDisplay() {

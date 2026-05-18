@@ -10,6 +10,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -88,10 +89,10 @@ object ScheduleRepository {
             (0 until arr.length()).map { i ->
                 val obj = arr.getJSONObject(i)
                 ScheduleItem(
-                    scheduleId        = obj.getInt("scheduleId"),
+                    scheduleId        = obj.getLong("scheduleId").toInt(),
                     title             = obj.optString("taskName", ""),
-                    steps             = parseTaskProcess(obj.optString("taskProcess", "[]")),
-                    triggerTimeMillis = parseScheduledAt(obj.optString("scheduledAt", "")),
+                    steps             = parseTaskProcess(obj),
+                    triggerTimeMillis = parseScheduledAt(obj),
                     location          = obj.optString("location", ""),
                     scheduleNote      = obj.optString("specialNote", "")
                 )
@@ -164,23 +165,40 @@ object ScheduleRepository {
 
     // ── 파싱 유틸 ────────────────────────────────────────────────────────────
 
-    private fun parseTaskProcess(json: String): List<String> = try {
-        val arr = JSONArray(json)
-        (0 until arr.length()).map { arr.getString(it) }
+    // taskProcess: 이미 파싱된 배열 or DB JSON 문자열 둘 다 처리
+    private fun parseTaskProcess(obj: JSONObject): List<String> = try {
+        val arr = obj.optJSONArray("taskProcess")
+        if (arr != null) {
+            (0 until arr.length()).map { arr.getString(it) }
+        } else {
+            val parsed = JSONArray(obj.optString("taskProcess", "[]"))
+            (0 until parsed.length()).map { parsed.getString(it) }
+        }
     } catch (e: Exception) { emptyList() }
 
-    private fun parseScheduledAt(iso: String): Long {
-        if (iso.isBlank()) return 0L
-        return try {
+    // scheduledAt: ISO 문자열 or Jackson 배열 [year,month,day,hour,min,sec] 둘 다 처리
+    private fun parseScheduledAt(obj: JSONObject): Long = try {
+        val arr = obj.optJSONArray("scheduledAt")
+        if (arr != null && arr.length() >= 5) {
+            val year = arr.getInt(0); val month = arr.getInt(1); val day = arr.getInt(2)
+            val hour = arr.getInt(3); val min   = arr.getInt(4)
+            val sec  = if (arr.length() > 5) arr.getInt(5) else 0
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                java.time.LocalDateTime.parse(iso)
-                    .atZone(java.time.ZoneId.systemDefault())
-                    .toInstant().toEpochMilli()
+                java.time.LocalDateTime.of(year, month, day, hour, min, sec)
+                    .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+            } else {
+                Calendar.getInstance().apply { set(year, month - 1, day, hour, min, sec); set(Calendar.MILLISECOND, 0) }.timeInMillis
+            }
+        } else {
+            val iso = obj.optString("scheduledAt", "")
+            if (iso.isBlank()) 0L
+            else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                java.time.LocalDateTime.parse(iso).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
             } else {
                 SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).parse(iso)?.time ?: 0L
             }
-        } catch (e: Exception) { 0L }
-    }
+        }
+    } catch (e: Exception) { 0L }
 
     // ── 더미 데이터 ──────────────────────────────────────────────────────────
 

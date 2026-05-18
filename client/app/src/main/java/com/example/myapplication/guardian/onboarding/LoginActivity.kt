@@ -89,12 +89,31 @@ class LoginActivity : AppCompatActivity() {
         FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
             NungilFirebaseMessagingService.registerTokenWithServer(token)
         }
-        val next = if (Session.isOnboarded) {
-            Intent(this, GuardianMainActivity::class.java)
-        } else {
-            Intent(this, WelcomeActivity::class.java)
+        // 서버에서 연동된 유저 목록 조회 → DB 기준으로 온보딩 여부 판단
+        ApiClient.get("/v1/user/link/${Session.guardianId}") { result ->
+            runOnUiThread {
+                val next = when {
+                    result is ApiResult.Success -> {
+                        try {
+                            val json = JSONObject(result.data)
+                            val arr = json.getJSONArray("result")
+                            if (arr.length() > 0) {
+                                val first = arr.getJSONObject(0)
+                                Session.userIdx = first.getInt("userIdx")
+                                Session.isOnboarded = true
+                                Intent(this, GuardianMainActivity::class.java)
+                            } else {
+                                Intent(this, WelcomeActivity::class.java)
+                            }
+                        } catch (e: Exception) {
+                            Intent(this, WelcomeActivity::class.java)
+                        }
+                    }
+                    else -> Intent(this, WelcomeActivity::class.java)
+                }
+                startActivity(next)
+                finish()
+            }
         }
-        startActivity(next)
-        finish()
     }
 }

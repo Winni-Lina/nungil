@@ -15,6 +15,7 @@
 /client/.externalNativeBuild
 /client/.cxx
 /client/local.properties
+/client/.claude
 
 # Vosk Model (100MB 초과 파일 방지)
 **/src/main/assets/model-ko/
@@ -24,40 +25,41 @@
 # OS 관련 임시 파일
 /client/Thumbs.db
 
+
 /client/app/google-services.json
 
 
 # Java & Maven
-target/
+/server/target/
 *.class
 *.jar
 *.war
 *.ear
 
 # Eclipse
-.settings/
-.project
-.classpath
-.metadata/
-bin/
+/server/.settings/
+/server/.project
+/server/.classpath
+/server/.metadata/
+/server/bin/
 *.tmp
 *.bak
 *.swp
 *~
-.sts4-cache/
+/server/.sts4-cache/
 
 # IntelliJ (혹시 다른 팀원이 쓸 수도 있으니)
-.idea/
-*.iml
-*.iws
-out/
+/server/.idea/
+/server/*.iml
+/server/*.iws
+/server/out/
 
 # OS
-.DS_Store
-Thumbs.db
+/server/.DS_Store
+/server/Thumbs.db
 
 # Environment variables (중요: API 키 노출 방지)
-.env
+/server/.env
 
 # Google Cloud 서비스 계정 키 (절대 커밋 금지)
 *.json

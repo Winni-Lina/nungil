@@ -2,6 +2,7 @@ package com.example.myapplication.core.manager
 
 import android.content.Context
 import android.media.MediaRecorder
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -31,7 +32,7 @@ class VoiceRecorderManager(
             voiceFile = File(context.getExternalFilesDir(null), "voice_input.m4a")
             voiceFile?.delete()
 
-            recorder = MediaRecorder().apply {
+            recorder = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()).apply {
                 setAudioSource(MediaRecorder.AudioSource.MIC)
                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)

@@ -1,8 +1,11 @@
 package com.example.myapplication.user.qr
 
+import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.myapplication.R
@@ -29,6 +32,32 @@ class UserQrActivity : AppCompatActivity() {
                     setOrientationLocked(false)
                 }
             )
+        }
+
+        findViewById<Button>(R.id.btnTestInput).setOnClickListener {
+            val layout = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(60, 40, 60, 20)
+            }
+            val etUserId  = EditText(this).apply { hint = "userId (예: guardian02)" }
+            val etUserIdx = EditText(this).apply { hint = "userIdx (예: 1)"; inputType = android.text.InputType.TYPE_CLASS_NUMBER }
+            layout.addView(etUserId)
+            layout.addView(etUserIdx)
+
+            AlertDialog.Builder(this)
+                .setTitle("테스트 직접 입력")
+                .setView(layout)
+                .setPositiveButton("확인") { _, _ ->
+                    val userId  = etUserId.text.toString().trim()
+                    val userIdx = etUserIdx.text.toString().toIntOrNull()
+                    if (userId.isEmpty() || userIdx == null) {
+                        Toast.makeText(this, "값을 올바르게 입력해주세요.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        handleQrResult(JSONObject().put("userId", userId).put("userIdx", userIdx).toString())
+                    }
+                }
+                .setNegativeButton("취소", null)
+                .show()
         }
     }
 

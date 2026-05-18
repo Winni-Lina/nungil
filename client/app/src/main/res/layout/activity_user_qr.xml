@@ -58,4 +58,17 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/tvUserQrDesc" />
 
+    <Button
+        android:id="@+id/btnTestInput"
+        android:layout_width="0dp"
+        android:layout_height="48dp"
+        android:layout_marginTop="12dp"
+        android:backgroundTint="#BDBDBD"
+        android:text="[테스트] 직접 입력"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/btnUserScan" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>
