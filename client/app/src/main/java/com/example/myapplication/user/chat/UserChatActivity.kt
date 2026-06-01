@@ -33,7 +33,6 @@ import com.example.myapplication.common.model.UserChatLog
 import com.example.myapplication.common.model.UserChatMessage
 import com.example.myapplication.config.AppConfig
 import com.example.myapplication.core.manager.TTSManager
-import com.example.myapplication.core.manager.VoiceRecorderManager
 import com.example.myapplication.core.manager.VoskWakeWordManager
 import com.example.myapplication.user.schedule.data.ScheduleRepository
 import com.example.myapplication.user.schedule.service.ScheduleAlarmReceiver
@@ -73,7 +72,6 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
     private enum class BearMood { BASIC, WORRY, PRAISE }
 
-    private lateinit var voiceRecorder: VoiceRecorderManager
     private lateinit var voskManager: VoskWakeWordManager
     private lateinit var ttsManager: TTSManager
     private lateinit var scheduleManager: ScheduleManager
@@ -83,9 +81,9 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private var shouldLaunchCamera = false
     private var speechRecognizer: SpeechRecognizer? = null
     private var sttFailCount = 0
+    private var awaitingFallbackButton = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // 1. 자동 갱신용 핸들러 및 루나블 추가
     private val refreshHandler = Handler(Looper.getMainLooper())
     private val refreshRunnable = object : Runnable {
         override fun run() {
@@ -218,8 +216,8 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
             if (shouldLaunchCamera) {
                 shouldLaunchCamera = false
                 mainHandler.postDelayed({ openBackCamera() }, 300)
-            } else if (isScheduleMode) {
-                // 일정 모드: TTS 끝나면 자동으로 음성 인식 시작
+            } else if (isScheduleMode && !awaitingFallbackButton) {
+                // 일정 모드: TTS 끝나면 자동으로 음성 인식 시작 (fallback 버튼 대기 중엔 안함)
                 if (!isRecording && loadingBar.visibility != View.VISIBLE) {
                     mainHandler.postDelayed({ startAutoScheduleListening() }, 600)
                 }
@@ -262,13 +260,6 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         ttsManager.onStatusListener = { isSpeaking ->
             if (!isSpeaking) handleTtsEndFlow() else updateMicButtonUI(forceMic = false)
         }
-
-        voiceRecorder = VoiceRecorderManager(this, object : VoiceRecorderManager.RecorderListener {
-            override fun onRecordingStart() {}
-            override fun onRecordingSuccess(file: File) {}
-            override fun onRecordingCancel() {}
-            override fun onError(message: String) {}
-        })
 
         voskManager = VoskWakeWordManager(this, "[\"똘똘\", \"똘똘아\"]", object : VoskWakeWordManager.WakeWordListener {
             override fun onKeywordDetected() {
@@ -475,6 +466,9 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
     private fun showScheduleFallbackButtons() {
         sttFailCount = 0
+        awaitingFallbackButton = true
+        isRecording = false
+        updateMicButtonUI(forceMic = true)
         val msg = "버튼을 눌러줘!"
         addMsg(msg, UserChatMessage.TYPE_OTHER, false, null, mutableListOf("했어요", "모르겠어요"))
         ttsManager.speak(msg)
@@ -565,6 +559,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
             runOnUiThread {
                 scheduleSteps = steps
                 scheduleNote = note
+                android.util.Log.d("ScheduleDebug", "단계 로드: ${steps.size}개 → $steps")
                 sendSchedulePromptToAI()
             }
         }.start()
@@ -606,7 +601,6 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         ttsManager.speak(doneMsg)
     }
 
-    // 2. onStart 수정 (리시버 등록 및 갱신 로직 시작)
     override fun onStart() {
         super.onStart()
         if (::voskManager.isInitialized) voskManager.startListening()
@@ -623,7 +617,6 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         }
     }
 
-    // 3. onStop 수정 (갱신 핸들러 중단)
     override fun onStop() {
         super.onStop()
         if (::voskManager.isInitialized) voskManager.stopListening()
@@ -640,7 +633,6 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         mainHandler.removeCallbacksAndMessages(null)
         refreshHandler.removeCallbacksAndMessages(null) // 핸들러 완전 정리
         if (::voskManager.isInitialized) voskManager.stopListening()
-        if (::voiceRecorder.isInitialized) voiceRecorder.release()
         if (::ttsManager.isInitialized) ttsManager.release()
         speechRecognizer?.destroy()
     }
@@ -672,9 +664,23 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     }
 
     override fun onSuggestionClick(text: String?) {
-        if (loadingBar.visibility == View.VISIBLE || isRecording || ttsManager.isSpeaking()) return
-        if (isScheduleMode && (text == "다음 단계로" || text == "완료" || text == "했어요")) { proceedToNextStep(); return }
-        if (isScheduleMode && text == "모르겠어요") { startRecordingFlow(manual = true); return }
+        if (loadingBar.visibility == View.VISIBLE) return
+        // 일정 모드 버튼은 녹음/TTS 중에도 클릭 허용
+        if (!isScheduleMode && (isRecording || ttsManager.isSpeaking())) return
+        if (isScheduleMode && (text == "다음 단계로" || text == "완료" || text == "했어요")) {
+            awaitingFallbackButton = false
+            speechRecognizer?.cancel()
+            isRecording = false
+            proceedToNextStep()
+            return
+        }
+        if (isScheduleMode && text == "모르겠어요") {
+            awaitingFallbackButton = false
+            speechRecognizer?.cancel()
+            isRecording = false
+            startRecordingFlow(manual = true)
+            return
+        }
         voskManager.stopListening()
         voiceMsgIndex = -1
         addMsg(text, UserChatMessage.TYPE_MINE, false, null, null)

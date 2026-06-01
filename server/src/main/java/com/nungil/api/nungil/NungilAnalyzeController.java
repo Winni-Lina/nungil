@@ -32,7 +32,6 @@ public class NungilAnalyzeController {
             @RequestPart(value = "voiceFile",     required = false) MultipartFile voiceFile,
             @RequestPart(value = "imageFile",     required = false) MultipartFile imageFile,
             @RequestParam(value = "textPrompt",   required = false) String textPrompt,
-            @RequestParam(value = "scheduleId",   required = false) Long scheduleId,
             @RequestParam(value = "mode",         required = false, defaultValue = "chat") String mode,
             @RequestParam(value = "scheduleTitle",required = false, defaultValue = "") String scheduleTitle,
             @RequestParam(value = "currentStep",  required = false, defaultValue = "") String currentStep,

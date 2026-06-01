@@ -90,8 +90,9 @@ class UserScheduleFragment : Fragment() {
                     rvSchedule.visibility = View.VISIBLE
                     rvSchedule.adapter = UserScheduleAdapter(items) { item ->
                         val intent = Intent(requireContext(), UserChatActivity::class.java).apply {
-                            putExtra("schedule_id", item.scheduleId)
+                            putExtra("schedule_id", item.scheduleId.toString())
                             putExtra("schedule_title", item.title)
+                            putExtra("schedule_auto_execute", true)
                         }
                         startActivity(intent)
                     }

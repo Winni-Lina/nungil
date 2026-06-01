@@ -11,8 +11,10 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        android.util.Log.d("AlarmDebug", "ScheduleAlarmReceiver.onReceive 호출!")
         val scheduleId = intent.getStringExtra("schedule_id") ?: return
         val title = intent.getStringExtra("schedule_title") ?: "일정"
+        android.util.Log.d("AlarmDebug", "알람 수신: scheduleId=$scheduleId title=$title")
 
         // 알림 표시 (앱 백그라운드 대비)
         ScheduleManager(context).showNotification(scheduleId, title)

@@ -46,15 +46,24 @@ class ScheduleManager(private val context: Context) {
     }
 
     fun registerAlarms(schedules: List<ScheduleRepository.ScheduleItem>) {
+        android.util.Log.d("AlarmDebug", "registerAlarms 호출 - 일정 ${schedules.size}개")
+        val now = System.currentTimeMillis()
         schedules.forEach { item ->
-            if (item.triggerTimeMillis > System.currentTimeMillis()) {
+            val diff = item.triggerTimeMillis - now
+            android.util.Log.d("AlarmDebug", "scheduleId=${item.scheduleId} title=${item.title} triggerTime=${item.triggerTimeMillis} diff=${diff}ms")
+            if (diff > 0) {
+                android.util.Log.d("AlarmDebug", "→ 알람 등록: ${item.title} (${diff / 1000}초 후)")
                 setAlarm(item.scheduleId.toString(), item.title, item.triggerTimeMillis)
+            } else {
+                android.util.Log.d("AlarmDebug", "→ 이미 지난 시간, 스킵")
             }
         }
     }
 
     private fun setAlarm(scheduleId: String, title: String, triggerTimeMillis: Long) {
         val pi = makePendingIntent(scheduleId, title)
+        // 기존 알람 취소 후 재등록 (시간 변경 시 이전 알람 잔류 방지)
+        alarmManager.cancel(pi)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
                 alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTimeMillis, pi)
@@ -64,6 +73,7 @@ class ScheduleManager(private val context: Context) {
         } else {
             alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerTimeMillis, pi)
         }
+        android.util.Log.d("AlarmDebug", "알람 설정 완료: scheduleId=$scheduleId time=$triggerTimeMillis")
     }
 
     private fun makePendingIntent(scheduleId: String, title: String): PendingIntent {

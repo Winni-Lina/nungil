@@ -41,7 +41,6 @@ public class AnalysisOrchestrator {
             if (imageFile != null && !imageFile.isEmpty()) {
                 base64Image = Base64.getEncoder().encodeToString(imageFile.getBytes());
                 contentType = imageFile.getContentType();
-                System.out.println("[STT] 업로드된 파일 타입: " + contentType);
             }
 
             // 3. Gemini 호출 (mode별 프롬프트 분기)
