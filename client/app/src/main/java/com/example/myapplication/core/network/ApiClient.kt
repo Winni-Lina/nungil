@@ -124,6 +124,24 @@ object ApiClient {
         })
     }
 
+    fun delete(path: String, body: String, onResult: (ApiResult<String>) -> Unit) {
+        val request = Request.Builder().url("$BASE_URL$path").delete(body.toRequestBody(JSON)).build()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                onResult(ApiResult.Error(e.message ?: "네트워크 오류"))
+            }
+            override fun onResponse(call: Call, response: Response) {
+                val body = response.body?.string()
+                if (!response.isSuccessful) {
+                    onResult(ApiResult.Error("서버 오류 ${response.code}: ${body ?: ""}"))
+                    return
+                }
+                if (body != null) onResult(ApiResult.Success(body))
+                else onResult(ApiResult.Error("빈 응답"))
+            }
+        })
+    }
+
     fun delete(path: String, onResult: (ApiResult<String>) -> Unit) {
         val request = Request.Builder().url("$BASE_URL$path").delete().build()
         client.newCall(request).enqueue(object : Callback {

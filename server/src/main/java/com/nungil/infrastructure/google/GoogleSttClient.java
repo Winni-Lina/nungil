@@ -1,7 +1,10 @@
 package com.nungil.infrastructure.google;
 
 import javax.annotation.PreDestroy;
+import java.io.InputStream;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -15,32 +18,27 @@ import com.google.protobuf.ByteString;
 @Component
 public class GoogleSttClient {
 
+    @Value("${google.service-account-key}")
+    private Resource serviceAccountKey;
+
     private SpeechClient speechClient;
 
-    /**
-     * 환경변수 GOOGLE_APPLICATION_CREDENTIALS 에 JSON 키 파일 경로를 설정해야 함
-     */
     private void initIfNeeded() throws Exception {
         if (speechClient != null) return;
 
         System.out.println("[STT] Google Cloud Speech 초기화 중...");
 
-        String credPath = System.getenv("GOOGLE_APPLICATION_CREDENTIALS");
-        if (credPath == null || credPath.isEmpty()) {
-            throw new IllegalStateException(
-                "환경변수 GOOGLE_APPLICATION_CREDENTIALS 가 설정되지 않았습니다.\n" +
-                "JSON 키 파일 경로를 환경변수에 등록해주세요."
-            );
+        try (InputStream is = serviceAccountKey.getInputStream()) {
+            GoogleCredentials credentials = GoogleCredentials.fromStream(is)
+                .createScoped("https://www.googleapis.com/auth/cloud-platform");
+
+            SpeechSettings settings = SpeechSettings.newBuilder()
+                    .setCredentialsProvider(com.google.api.gax.core.FixedCredentialsProvider.create(credentials))
+                    .build();
+
+            this.speechClient = SpeechClient.create(settings);
+            System.out.println("[STT] 초기화 완료!");
         }
-
-        GoogleCredentials credentials = GoogleCredentials.getApplicationDefault();
-
-        SpeechSettings settings = SpeechSettings.newBuilder()
-                .setCredentialsProvider(com.google.api.gax.core.FixedCredentialsProvider.create(credentials))
-                .build();
-
-        this.speechClient = SpeechClient.create(settings);
-        System.out.println("[STT] 초기화 완료!");
     }
 
     /** 음성 파일을 텍스트로 변환 */

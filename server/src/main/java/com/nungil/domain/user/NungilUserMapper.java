@@ -24,4 +24,8 @@ public interface NungilUserMapper {
 
     void updateUserInfo(@Param("id") String id, @Param("idx") int idx,
                         @Param("userName") String userName, @Param("userPhone") String userPhone);
+
+    void updateFcmToken(@Param("id") String id, @Param("idx") int idx, @Param("fcmToken") String fcmToken);
+
+    void deleteByGuardianId(@Param("id") String id);
 }

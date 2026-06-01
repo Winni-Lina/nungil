@@ -84,6 +84,59 @@ public class GuardianAuthController {
         return response;
     }
 
+    /** 비밀번호 찾기 POST /api/v1/guardian/auth/reset-password
+     *  Body: { "id": "...", "email": "..." }
+     */
+    @PostMapping("/reset-password")
+    public Map<String, Object> resetPassword(@RequestBody Map<String, Object> body) {
+        System.out.println("[API] POST /api/v1/guardian/auth/reset-password | id=" + body.get("id"));
+        Map<String, Object> response = new HashMap<>();
+        try {
+            String id    = (String) body.get("id");
+            String email = (String) body.get("email");
+            String tempPw = guardianService.resetPassword(id, email);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("tempPassword", tempPw);
+            response.put("status", "SUCCESS");
+            response.put("result", result);
+        } catch (IllegalArgumentException e) {
+            response.put("status", "ERROR");
+            response.put("errorCode", e.getMessage());
+            response.put("message", "USER_NOT_FOUND".equals(e.getMessage())
+                    ? "존재하지 않는 아이디입니다." : "이메일이 일치하지 않습니다.");
+        } catch (Exception e) {
+            response.put("status", "ERROR");
+            response.put("message", e.getMessage());
+        }
+        return response;
+    }
+
+    /** 계정 삭제 DELETE /api/v1/guardian/auth/{id}
+     *  Body: { "pw": "..." }
+     */
+    @DeleteMapping("/{id}")
+    public Map<String, Object> deleteAccount(@PathVariable("id") String id,
+                                              @RequestBody Map<String, Object> body) {
+        System.out.println("[API] DELETE /api/v1/guardian/auth/" + id);
+        Map<String, Object> response = new HashMap<>();
+        try {
+            String pw = (String) body.get("pw");
+            guardianService.deleteAccount(id, pw);
+            response.put("status", "SUCCESS");
+            response.put("message", "계정이 삭제됐어요.");
+        } catch (IllegalArgumentException e) {
+            response.put("status", "ERROR");
+            response.put("errorCode", e.getMessage());
+            response.put("message", "INVALID_CREDENTIALS".equals(e.getMessage())
+                    ? "비밀번호가 올바르지 않습니다." : "존재하지 않는 계정입니다.");
+        } catch (Exception e) {
+            response.put("status", "ERROR");
+            response.put("message", e.getMessage());
+        }
+        return response;
+    }
+
     /** FCM 토큰 등록 PUT /api/v1/guardian/auth/fcm-token */
     @PutMapping("/fcm-token")
     public Map<String, Object> updateFcmToken(@RequestBody Map<String, Object> body) {

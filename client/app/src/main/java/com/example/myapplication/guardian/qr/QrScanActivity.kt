@@ -50,10 +50,29 @@ class QrScanActivity : AppCompatActivity() {
         // 이미 userIdx가 저장돼 있으면 기존 QR 바로 표시
         if (Session.userIdx > 0) {
             showQr(Session.guardianId, Session.userIdx, ivQr, tvStatus, btnNext)
-            btnLink.text = "새 사용자 추가 연동"
+            if (fromOnboarding) {
+                // 온보딩 중에는 추가 연동 버튼 숨김 (실수로 중복 생성 방지)
+                btnLink.visibility = View.GONE
+            } else {
+                btnLink.text = "새 사용자 추가 연동"
+            }
         }
 
         btnLink.setOnClickListener {
+            if (Session.userIdx > 0) {
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("새 사용자 추가")
+                    .setMessage("이미 연동된 사용자가 있어요. 새 사용자를 추가하면 기존 일정과 설정은 그대로 유지됩니다. 계속할까요?")
+                    .setPositiveButton("추가") { _, _ -> doLink(btnLink, ivQr, btnNext, pbLoad, tvStatus) }
+                    .setNegativeButton("취소", null)
+                    .show()
+                return@setOnClickListener
+            }
+            doLink(btnLink, ivQr, btnNext, pbLoad, tvStatus)
+        }
+    }
+
+    private fun doLink(btnLink: Button, ivQr: ImageView, btnNext: Button, pbLoad: ProgressBar, tvStatus: TextView) {
             btnLink.isEnabled  = false
             ivQr.visibility    = View.GONE
             btnNext.visibility = View.GONE
@@ -97,7 +116,6 @@ class QrScanActivity : AppCompatActivity() {
                     }
                 }
             }
-        }
     }
 
     private fun showQr(userId: String, userIdx: Int, ivQr: ImageView, tvStatus: TextView, btnNext: Button) {

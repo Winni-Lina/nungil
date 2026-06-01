@@ -10,6 +10,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.myapplication.R
 import com.example.myapplication.user.chat.UserChatActivity
+import com.example.myapplication.core.network.ApiClient
+import com.google.firebase.messaging.FirebaseMessaging
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import org.json.JSONObject
@@ -71,6 +73,16 @@ class UserQrActivity : AppCompatActivity() {
                 .putString("user_id", userId)
                 .putInt("user_idx", userIdx)
                 .apply()
+
+            // FCM 토큰 서버에 등록
+            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                val body = org.json.JSONObject().apply {
+                    put("userId", userId)
+                    put("userIdx", userIdx)
+                    put("fcmToken", token)
+                }.toString()
+                ApiClient.put("/api/v1/user/fcm-token", body) {}
+            }
 
             startActivity(Intent(this, UserChatActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK

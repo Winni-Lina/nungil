@@ -8,8 +8,12 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.example.myapplication.user.chat.UserChatActivity
 import com.example.myapplication.user.schedule.data.ScheduleRepository
+import java.util.concurrent.TimeUnit
 
 class ScheduleManager(private val context: Context) {
 
@@ -37,12 +41,16 @@ class ScheduleManager(private val context: Context) {
     fun syncSchedulesFromDB(userId: String, userIdx: Int) {
         Thread {
             val schedules = ScheduleRepository.fetchTodaySchedules(userId, userIdx)
-            schedules.forEach { item ->
-                if (item.triggerTimeMillis > System.currentTimeMillis()) {
-                    setAlarm(item.scheduleId.toString(), item.title, item.triggerTimeMillis)
-                }
-            }
+            registerAlarms(schedules)
         }.start()
+    }
+
+    fun registerAlarms(schedules: List<ScheduleRepository.ScheduleItem>) {
+        schedules.forEach { item ->
+            if (item.triggerTimeMillis > System.currentTimeMillis()) {
+                setAlarm(item.scheduleId.toString(), item.title, item.triggerTimeMillis)
+            }
+        }
     }
 
     private fun setAlarm(scheduleId: String, title: String, triggerTimeMillis: Long) {
@@ -67,6 +75,40 @@ class ScheduleManager(private val context: Context) {
             context, scheduleId.hashCode(), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+    }
+
+    fun startPeriodicCheck() {
+        val request = PeriodicWorkRequestBuilder<ScheduleCheckWorker>(15, TimeUnit.MINUTES)
+            .build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            "schedule_check",
+            ExistingPeriodicWorkPolicy.KEEP,
+            request
+        )
+    }
+
+    fun showLateNotification(scheduleId: String, title: String) {
+        val doIntent = Intent(context, UserChatActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("schedule_id", scheduleId)
+            putExtra("schedule_title", title)
+            putExtra("schedule_auto_execute", true)
+        }
+        val doPi = PendingIntent.getActivity(
+            context, scheduleId.hashCode() + 2, doIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("⏰ 일정 시간이 지났어요")
+            .setContentText("조금 늦었지만 지금 해볼까요? - $title")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(doPi)
+            .addAction(0, "지금 하기", doPi)
+            .build()
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .notify(NOTIFICATION_ID_BASE + scheduleId.hashCode() + 100, notification)
     }
 
     fun showNotification(scheduleId: String, title: String) {

@@ -123,6 +123,13 @@
     <scope>test</scope>
 </dependency>
 
+<!-- SLF4J 1.x nop 바인딩 (Firebase SDK의 StaticLoggerBinder 경고 제거) -->
+<dependency>
+    <groupId>org.slf4j</groupId>
+    <artifactId>slf4j-nop</artifactId>
+    <version>1.7.36</version>
+</dependency>
+
 <!-- Google Cloud Speech-to-Text -->
 <dependency>
     <groupId>com.google.cloud</groupId>

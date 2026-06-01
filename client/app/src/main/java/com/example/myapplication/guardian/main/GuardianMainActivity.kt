@@ -3,39 +3,39 @@ package com.example.myapplication.guardian.main
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
-import androidx.viewpager2.adapter.FragmentStateAdapter
-import androidx.viewpager2.widget.ViewPager2
 import com.example.myapplication.R
 import com.example.myapplication.guardian.report.ReportFragment
 import com.example.myapplication.guardian.schedule.ui.ScheduleFragment
 import com.example.myapplication.guardian.settings.SettingsFragment
-import com.google.android.material.tabs.TabLayout
-import com.google.android.material.tabs.TabLayoutMediator
+import com.google.android.material.bottomnavigation.BottomNavigationView
 
 class GuardianMainActivity : AppCompatActivity() {
+
+    private val scheduleFragment = ScheduleFragment()
+    private val reportFragment   = ReportFragment()
+    private val settingsFragment = SettingsFragment()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_guardian_main)
 
-        val viewPager = findViewById<ViewPager2>(R.id.viewPager)
-        val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
-
-        viewPager.adapter = object : FragmentStateAdapter(this) {
-            override fun getItemCount() = 3
-            override fun createFragment(position: Int): Fragment = when (position) {
-                0 -> ScheduleFragment()
-                1 -> ReportFragment()
-                else -> SettingsFragment()
-            }
+        if (savedInstanceState == null) {
+            showFragment(scheduleFragment)
         }
 
-        TabLayoutMediator(tabLayout, viewPager) { tab, position ->
-            tab.text = when (position) {
-                0 -> "📅 일정"
-                1 -> "📊 보고서"
-                else -> "⚙ 설정"
+        findViewById<BottomNavigationView>(R.id.bottomNav).setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_schedule -> { showFragment(scheduleFragment); true }
+                R.id.nav_report   -> { showFragment(reportFragment);   true }
+                R.id.nav_settings -> { showFragment(settingsFragment);  true }
+                else              -> false
             }
-        }.attach()
+        }
+    }
+
+    private fun showFragment(fragment: Fragment) {
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment)
+            .commit()
     }
 }

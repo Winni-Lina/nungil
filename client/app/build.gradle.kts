@@ -52,6 +52,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.6.2")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
 
+    // WorkManager
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+
     // Vosk 음성 인식
     implementation("com.alphacephei:vosk-android:0.3.32")
     implementation("net.java.dev.jna:jna:5.13.0@aar")

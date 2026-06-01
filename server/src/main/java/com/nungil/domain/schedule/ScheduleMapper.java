@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface ScheduleMapper {
@@ -29,4 +30,16 @@ public interface ScheduleMapper {
     List<ScheduleVO> findTodayPendingByUser(@Param("id") String id, @Param("idx") int idx);
 
     List<ScheduleVO> findOverdue();
+
+    void deleteByGuardianId(@Param("id") String id);
+
+    List<ScheduleVO> findByDate(@Param("id") String id, @Param("idx") int idx,
+                                @Param("date") String date);
+
+    void incrementQuestionCount(@Param("scheduleId") Long scheduleId);
+
+    List<Map<String, Object>> findRecentRepeatUsers();
+
+    List<Map<String, Object>> findTaskTrends(@Param("id") String id, @Param("idx") int idx,
+                                              @Param("days") int days);
 }

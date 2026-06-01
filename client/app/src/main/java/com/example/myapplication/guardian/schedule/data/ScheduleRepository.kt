@@ -43,13 +43,20 @@ class ScheduleRepository {
                         val list = mutableListOf<Schedule>()
                         for (i in 0 until arr.length()) {
                             val obj = arr.getJSONObject(i)
+                            val stepsArr = obj.optJSONArray("taskProcess")
+                            val steps = if (stepsArr != null) {
+                                (0 until stepsArr.length()).map { stepsArr.getString(it) }
+                            } else emptyList()
                             list.add(
                                 Schedule(
-                                    scheduleId = obj.getInt("scheduleId"),
-                                    taskId = obj.getInt("taskId"),
-                                    taskName = obj.getString("taskName"),
-                                    status = obj.getString("status"),
-                                    scheduledAt = parseScheduledAt(obj)
+                                    scheduleId  = obj.getInt("scheduleId"),
+                                    taskId      = obj.getInt("taskId"),
+                                    taskName    = obj.getString("taskName"),
+                                    status      = obj.getString("status"),
+                                    scheduledAt = parseScheduledAt(obj),
+                                    location    = obj.optString("location", ""),
+                                    specialNote = obj.optString("specialNote", ""),
+                                    taskProcess = steps
                                 )
                             )
                         }

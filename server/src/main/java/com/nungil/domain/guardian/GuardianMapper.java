@@ -13,4 +13,8 @@ public interface GuardianMapper {
     GuardianVO findByEmail(@Param("email") String email);
 
     void updateFcmToken(@Param("id") String id, @Param("fcmToken") String fcmToken);
+
+    void updatePw(@Param("id") String id, @Param("pw") String pw);
+
+    void deleteById(@Param("id") String id);
 }

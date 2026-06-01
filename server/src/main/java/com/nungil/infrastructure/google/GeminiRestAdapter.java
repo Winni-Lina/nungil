@@ -40,8 +40,11 @@ public class GeminiRestAdapter {
         requestBody.put("contents", contents);
 
         try {
+            System.out.println("[Gemini] 프롬프트 전송:\n" + prompt);
             Map<String, Object> response = restTemplate.postForObject(finalUrl, requestBody, Map.class);
-            return parseResponse(response);
+            String result = parseResponse(response);
+            System.out.println("[Gemini] 응답:\n" + result);
+            return result;
         } catch (Exception e) {
             System.err.println("[Gemini Error] " + e.getMessage());
             return "{\"answer\": \"AI 통신 중 오류가 발생했습니다.\", \"suggestedQuestions\": []}";

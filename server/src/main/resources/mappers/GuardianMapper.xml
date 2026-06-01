@@ -31,4 +31,12 @@
         UPDATE GUARDIAN SET fcm_token = #{fcmToken} WHERE id = #{id}
     </update>
 
+    <update id="updatePw">
+        UPDATE GUARDIAN SET pw = #{pw} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM GUARDIAN WHERE id = #{id}
+    </delete>
+
 </mapper>

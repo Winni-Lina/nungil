@@ -8,6 +8,7 @@ public class NungilUserVO {
     private String whiteList; // 콤마 구분 task_id 목록 (예: "1,2,3")
     private String userName;
     private String userPhone;
+    private String fcmToken;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -26,4 +27,7 @@ public class NungilUserVO {
 
     public String getUserPhone() { return userPhone; }
     public void setUserPhone(String userPhone) { this.userPhone = userPhone; }
+
+    public String getFcmToken() { return fcmToken; }
+    public void setFcmToken(String fcmToken) { this.fcmToken = fcmToken; }
 }

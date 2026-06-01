@@ -41,11 +41,14 @@
         <activity android:name=".guardian.main.GuardianMainActivity" />
         <activity android:name=".guardian.onboarding.WelcomeActivity" />
         <activity android:name=".guardian.onboarding.LoginActivity" />
+        <activity android:name=".guardian.onboarding.SignupActivity" />
+        <activity android:name=".guardian.onboarding.ForgotPasswordActivity" />
         <activity android:name=".guardian.onboarding.GuardianChatActivity" />
         <activity android:name=".guardian.onboarding.SpecialNotesActivity" />
         <activity android:name=".guardian.onboarding.SetupCompleteActivity" />
         <activity android:name=".guardian.schedule.ui.ScheduleAddActivity" />
         <activity android:name=".user.UserStartActivity"/>
+        <activity android:name=".user.main.UserMainActivity"/>
         <activity android:name=".user.qr.UserQrActivity"/>
         <activity android:name=".guardian.qr.QrScanActivity"/>
         <activity android:name=".user.chat.UserChatActivity"/>

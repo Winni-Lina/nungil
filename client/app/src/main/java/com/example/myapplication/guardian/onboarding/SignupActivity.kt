@@ -1,0 +1,99 @@
+package com.example.myapplication.guardian.onboarding
+
+import android.os.Bundle
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.ProgressBar
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import com.example.myapplication.R
+import com.example.myapplication.core.network.ApiClient
+import com.example.myapplication.core.network.ApiResult
+import org.json.JSONObject
+
+class SignupActivity : AppCompatActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_signup)
+
+        findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
+
+        val etId        = findViewById<EditText>(R.id.etId)
+        val etPw        = findViewById<EditText>(R.id.etPw)
+        val etPwConfirm = findViewById<EditText>(R.id.etPwConfirm)
+        val etName      = findViewById<EditText>(R.id.etName)
+        val etEmail     = findViewById<EditText>(R.id.etEmail)
+        val etPhone     = findViewById<EditText>(R.id.etPhone)
+        val btnSignup   = findViewById<Button>(R.id.btnSignup)
+        val pbSignup    = findViewById<ProgressBar>(R.id.pbSignup)
+        val tvError     = findViewById<TextView>(R.id.tvError)
+
+        btnSignup.setOnClickListener {
+            val id    = etId.text.toString().trim()
+            val pw    = etPw.text.toString()
+            val pwCfm = etPwConfirm.text.toString()
+            val name  = etName.text.toString().trim()
+            val email = etEmail.text.toString().trim()
+            val phone = etPhone.text.toString().trim()
+
+            if (id.isEmpty() || pw.isEmpty() || name.isEmpty() || email.isEmpty()) {
+                showError(tvError, "아이디, 비밀번호, 이름, 이메일은 필수예요.")
+                return@setOnClickListener
+            }
+            if (pw != pwCfm) {
+                showError(tvError, "비밀번호가 일치하지 않아요.")
+                return@setOnClickListener
+            }
+            if (pw.length < 4) {
+                showError(tvError, "비밀번호는 4자 이상이어야 해요.")
+                return@setOnClickListener
+            }
+
+            tvError.visibility  = View.GONE
+            pbSignup.visibility = View.VISIBLE
+            btnSignup.isEnabled = false
+
+            val body = JSONObject().apply {
+                put("id",    id)
+                put("pw",    pw)
+                put("name",  name)
+                put("email", email)
+                put("phone", phone)
+            }.toString()
+
+            ApiClient.post("/v1/guardian/auth/signup", body) { result ->
+                runOnUiThread {
+                    pbSignup.visibility = View.GONE
+                    btnSignup.isEnabled = true
+                    when (result) {
+                        is ApiResult.Success -> {
+                            try {
+                                val json   = JSONObject(result.data)
+                                val status = json.optString("status", "")
+                                if (status == "SUCCESS") {
+                                    Toast.makeText(this, "가입 완료! 로그인해주세요.", Toast.LENGTH_SHORT).show()
+                                    finish()
+                                } else {
+                                    val code = json.optString("errorCode", "")
+                                    showError(tvError, if (code == "ID_EXISTS") "이미 사용 중인 아이디예요." else "가입에 실패했어요.")
+                                }
+                            } catch (e: Exception) {
+                                showError(tvError, "응답 처리 오류")
+                            }
+                        }
+                        is ApiResult.Error -> showError(tvError, "서버 연결 실패: ${result.message}")
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showError(tv: TextView, msg: String) {
+        tv.text       = msg
+        tv.visibility = View.VISIBLE
+    }
+}

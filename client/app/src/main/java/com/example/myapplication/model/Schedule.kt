@@ -5,5 +5,8 @@ data class Schedule(
     val taskId: Int,
     val taskName: String,
     val status: String,
-    val scheduledAt: String
+    val scheduledAt: String,
+    val location: String = "",
+    val specialNote: String = "",
+    val taskProcess: List<String> = emptyList()
 )

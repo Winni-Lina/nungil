@@ -85,6 +85,66 @@ class SettingsFragment : Fragment() {
                 .setNegativeButton("취소", null)
                 .show()
         }
+
+        view.findViewById<android.widget.Button>(R.id.btnDeleteAccount).setOnClickListener {
+            showDeleteAccountDialog()
+        }
+    }
+
+    private fun showDeleteAccountDialog() {
+        val container = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(48, 24, 48, 8)
+        }
+        val etPw = android.widget.EditText(requireContext()).apply {
+            hint = "현재 비밀번호"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        container.addView(etPw)
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("계정 삭제")
+            .setMessage("계정을 삭제하면 모든 데이터가 영구적으로 삭제돼요.\n정말 삭제할까요?")
+            .setView(container)
+            .setPositiveButton("삭제") { _, _ ->
+                val pw = etPw.text.toString()
+                if (pw.isEmpty()) {
+                    Toast.makeText(context, "비밀번호를 입력해주세요.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                deleteAccount(pw)
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun deleteAccount(pw: String) {
+        val id   = Session.guardianId
+        val body = org.json.JSONObject().apply { put("pw", pw) }.toString()
+        ApiClient.delete("/v1/guardian/auth/$id", body) { result ->
+            activity?.runOnUiThread {
+                when (result) {
+                    is ApiResult.Success -> {
+                        try {
+                            val json = org.json.JSONObject(result.data)
+                            if (json.optString("status") == "SUCCESS") {
+                                Toast.makeText(context, "계정이 삭제됐어요.", Toast.LENGTH_SHORT).show()
+                                Session.logout()
+                                val intent = Intent(requireContext(), LoginActivity::class.java)
+                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                startActivity(intent)
+                            } else {
+                                Toast.makeText(context, json.optString("message", "삭제에 실패했어요."), Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "응답 처리 오류", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    is ApiResult.Error -> Toast.makeText(context, "삭제 실패: ${result.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     private fun loadWhitelist(pb: ProgressBar) {

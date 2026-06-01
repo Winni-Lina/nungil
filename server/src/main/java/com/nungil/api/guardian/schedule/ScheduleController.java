@@ -2,6 +2,8 @@ package com.nungil.api.guardian.schedule;
 
 import com.nungil.domain.schedule.ScheduleService;
 import com.nungil.domain.schedule.ScheduleVO;
+import com.nungil.domain.user.NungilUserService;
+import com.nungil.infrastructure.firebase.FcmService;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -14,9 +16,15 @@ import java.util.Map;
 public class ScheduleController {
 
     private final ScheduleService scheduleService;
+    private final NungilUserService nungilUserService;
+    private final FcmService fcmService;
 
-    public ScheduleController(ScheduleService scheduleService) {
+    public ScheduleController(ScheduleService scheduleService,
+                               NungilUserService nungilUserService,
+                               FcmService fcmService) {
         this.scheduleService = scheduleService;
+        this.nungilUserService = nungilUserService;
+        this.fcmService = fcmService;
     }
 
     /** 일정 등록 POST /api/v1/guardian/schedules
@@ -36,6 +44,10 @@ public class ScheduleController {
             schedule.setSpecialNote((String) body.get("specialNote"));   // SC-005
 
             scheduleService.create(schedule);
+
+            // FCM으로 사용자 앱에 알림
+            String fcmToken = nungilUserService.getFcmToken(schedule.getId(), schedule.getIdx());
+            fcmService.sendScheduleUpdated(fcmToken);
 
             System.out.println("[결과] 일정 등록 완료 scheduleId=" + schedule.getScheduleId());
             response.put("status", "SUCCESS");
@@ -116,7 +128,14 @@ public class ScheduleController {
         Map<String, Object> response = new HashMap<>();
         try {
             LocalDateTime scheduledAt = LocalDateTime.parse((String) body.get("scheduledAt"));
+            ScheduleVO schedule = scheduleService.findById(scheduleId);
             scheduleService.updateScheduledAt(scheduleId, scheduledAt);
+
+            if (schedule != null) {
+                String fcmToken = nungilUserService.getFcmToken(schedule.getId(), schedule.getIdx());
+                fcmService.sendScheduleUpdated(fcmToken);
+            }
+
             System.out.println("[결과] 일정 시간 변경 완료");
             response.put("status", "SUCCESS");
             response.put("message", "시간이 변경됐어요!");

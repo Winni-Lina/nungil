@@ -15,8 +15,10 @@
         <result property="successAt"    column="success_at"/>
         <result property="location"     column="location"/>
         <result property="specialNote"  column="special_note"/>
-        <result property="taskName"     column="task_name"/>
-        <result property="taskProcess"  column="task_process"/>
+        <result property="questionCount"   column="question_count"/>
+        <result property="lastQuestionAt" column="last_question_at"/>
+        <result property="taskName"       column="task_name"/>
+        <result property="taskProcess"    column="task_process"/>
     </resultMap>
 
     <insert id="insert" parameterType="com.nungil.domain.schedule.ScheduleVO">
@@ -79,6 +81,56 @@
           AND s.status = 'pending'
           AND s.scheduled_at >= TRUNC(SYSDATE)
         ORDER BY s.scheduled_at ASC
+    </select>
+
+    <delete id="deleteByGuardianId">
+        DELETE FROM SCHEDULE WHERE id = #{id}
+    </delete>
+
+    <update id="incrementQuestionCount">
+        UPDATE SCHEDULE
+        SET question_count = question_count + 1,
+            last_question_at = CURRENT_TIMESTAMP
+        WHERE schedule_id = #{scheduleId}
+    </update>
+
+    <!-- NT-004: 최근 1시간 내 질문 2회 이상 발생한 사용자 -->
+    <select id="findRecentRepeatUsers" resultType="java.util.HashMap">
+        SELECT id, idx, SUM(question_count) AS cnt
+        FROM SCHEDULE
+        WHERE last_question_at > SYSDATE - 1/24
+          AND TRUNC(scheduled_at) = TRUNC(SYSDATE)
+        GROUP BY id, idx
+        HAVING SUM(question_count) >= 2
+    </select>
+
+    <select id="findByDate" resultMap="ScheduleResultMap">
+        SELECT s.*, t.name AS task_name
+        FROM SCHEDULE s
+        LEFT JOIN TASK t ON s.task_id = t.task_id
+        WHERE s.id = #{id} AND s.idx = #{idx}
+          AND TRUNC(s.scheduled_at) = TO_DATE(#{date}, 'YYYY-MM-DD')
+        ORDER BY s.scheduled_at ASC
+    </select>
+
+    <select id="findTaskTrends" resultType="java.util.HashMap">
+        SELECT
+            s.task_id                                                        AS "taskId",
+            t.name                                                           AS "taskName",
+            COUNT(*)                                                         AS "totalCount",
+            SUM(CASE WHEN s.status = 'completed' THEN 1 ELSE 0 END)         AS "completedCount",
+            ROUND(AVG(s.question_count), 1)                                  AS "avgQuestions",
+            ROUND(AVG(CASE WHEN TRUNC(s.scheduled_at) >= TRUNC(SYSDATE) - (#{days}/2 - 1)
+                           THEN s.question_count END), 1)                    AS "recentAvgQ",
+            ROUND(AVG(CASE WHEN TRUNC(s.scheduled_at) &lt; TRUNC(SYSDATE) - (#{days}/2 - 1)
+                           THEN s.question_count END), 1)                    AS "prevAvgQ"
+        FROM SCHEDULE s
+        JOIN TASK t ON s.task_id = t.task_id
+        WHERE s.id = #{id}
+          AND s.idx = #{idx}
+          AND TRUNC(s.scheduled_at) BETWEEN TRUNC(SYSDATE) - #{days} AND TRUNC(SYSDATE)
+        GROUP BY s.task_id, t.name
+        ORDER BY s.task_id
     </select>
 
 </mapper>

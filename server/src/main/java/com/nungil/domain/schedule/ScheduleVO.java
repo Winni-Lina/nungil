@@ -15,6 +15,9 @@ public class ScheduleVO {
     private String location;    // SC-004: 장소 (세탁실, 부엌, 거실, 화장실, 방, 기타)
     private String specialNote; // SC-005: 일정 특이사항
 
+    private int questionCount;
+    private LocalDateTime lastQuestionAt;
+
     // JOIN 조회용
     private String taskName;
     private String taskProcess;
@@ -48,6 +51,12 @@ public class ScheduleVO {
 
     public String getSpecialNote() { return specialNote; }
     public void setSpecialNote(String specialNote) { this.specialNote = specialNote; }
+
+    public int getQuestionCount() { return questionCount; }
+    public void setQuestionCount(int questionCount) { this.questionCount = questionCount; }
+
+    public LocalDateTime getLastQuestionAt() { return lastQuestionAt; }
+    public void setLastQuestionAt(LocalDateTime lastQuestionAt) { this.lastQuestionAt = lastQuestionAt; }
 
     public String getTaskName() { return taskName; }
     public void setTaskName(String taskName) { this.taskName = taskName; }

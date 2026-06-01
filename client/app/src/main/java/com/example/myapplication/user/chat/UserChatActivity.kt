@@ -13,6 +13,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.util.Log
 import android.view.View
 import android.widget.ImageView
@@ -37,6 +40,7 @@ import com.example.myapplication.user.schedule.service.ScheduleAlarmReceiver
 import com.example.myapplication.user.schedule.service.ScheduleManager
 import com.google.gson.Gson
 import okhttp3.*
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -77,6 +81,8 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private var isRecording = false
     private var voiceMsgIndex = -1
     private var shouldLaunchCamera = false
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var sttFailCount = 0
     private val mainHandler = Handler(Looper.getMainLooper())
 
     // 1. 자동 갱신용 핸들러 및 루나블 추가
@@ -91,6 +97,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         }
     }
 
+    private var userName = ""
     private var userSpecialNote = ""
     private var whitelistTaskNames = listOf<String>()
 
@@ -136,12 +143,13 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
         scheduleManager = ScheduleManager(this)
         ScheduleManager.createNotificationChannel(this)
+        scheduleManager.startPeriodicCheck()
 
         setupUI()
         setupManagers()
         checkPermissions()
 
-        val welcomeMsg = "반가워요! '똘똘아'라고 불러보세요."
+        val welcomeMsg = "안녕! 나는 똘똘이야. 뭐든 물어봐!"
         addMsg(welcomeMsg, UserChatMessage.TYPE_OTHER, false, null, mutableListOf("오늘 날씨 어때?", "넌 누구니?"))
         conversationHistory.add(UserChatLog("AI", welcomeMsg))
         mainHandler.postDelayed({ ttsManager.speak(welcomeMsg) }, 1000)
@@ -159,8 +167,16 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         Thread {
             val userInfo = ScheduleRepository.fetchUserInfo(USER_ID, USER_IDX)
             runOnUiThread {
+                userName = userInfo.userName
                 userSpecialNote = userInfo.specialNote
                 whitelistTaskNames = userInfo.whitelistTaskNames
+                // 이름 받은 후 환영 메시지 업데이트
+                val greet = if (userName.isNotBlank()) "${userName}야, 반가워! 나는 똘똘이야. 뭐든 물어봐!" else "반가워! 나는 똘똘이야. 뭐든 물어봐!"
+                if (chatList.isNotEmpty()) {
+                    chatList[0].content = greet
+                    adapter.notifyItemChanged(0)
+                    ttsManager.speak(greet)
+                }
             }
         }.start()
         // 최초 1회 즉시 실행
@@ -186,7 +202,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     handleTtsEndFlow()
                 }
                 isRecording -> {
-                    voiceRecorder.cancel()
+                    speechRecognizer?.cancel()
                     resetToIdleState()
                 }
                 else -> {
@@ -202,10 +218,30 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
             if (shouldLaunchCamera) {
                 shouldLaunchCamera = false
                 mainHandler.postDelayed({ openBackCamera() }, 300)
+            } else if (isScheduleMode) {
+                // 일정 모드: TTS 끝나면 자동으로 음성 인식 시작
+                if (!isRecording && loadingBar.visibility != View.VISIBLE) {
+                    mainHandler.postDelayed({ startAutoScheduleListening() }, 600)
+                }
             } else {
                 if (!isRecording && loadingBar.visibility != View.VISIBLE) voskManager.startListening()
             }
         }
+    }
+
+    private fun startAutoScheduleListening() {
+        if (!isScheduleMode || isRecording || loadingBar.visibility == View.VISIBLE) return
+        voskManager.stopListening()
+        isRecording = true
+        updateMicButtonUI()
+        // 기존 메시지 재사용, 없으면 새로 추가
+        if (voiceMsgIndex == -1 || voiceMsgIndex >= chatList.size) {
+            addMsg("🎤 듣고 있습니다...", UserChatMessage.TYPE_MINE, false, null, null)
+            voiceMsgIndex = chatList.size - 1
+        } else {
+            updateVoiceStatus("🎤 듣고 있습니다...")
+        }
+        startSpeechRecognition(scheduleMode = true)
     }
 
     private fun updateMicButtonUI(forceMic: Boolean = false) {
@@ -228,22 +264,10 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         }
 
         voiceRecorder = VoiceRecorderManager(this, object : VoiceRecorderManager.RecorderListener {
-            override fun onRecordingStart() {
-                isRecording = true
-                runOnUiThread {
-                    updateMicButtonUI()
-                    addMsg("🎤 듣고 있습니다...", UserChatMessage.TYPE_MINE, false, null, null)
-                    voiceMsgIndex = chatList.size - 1
-                }
-            }
-            override fun onRecordingSuccess(file: File) {
-                isRecording = false
-                updateMicButtonUI()
-                updateVoiceStatus("🔍 분석 중...")
-                uploadToServer(null, file, null)
-            }
-            override fun onRecordingCancel() { resetToIdleState() }
-            override fun onError(message: String) { resetToIdleState() }
+            override fun onRecordingStart() {}
+            override fun onRecordingSuccess(file: File) {}
+            override fun onRecordingCancel() {}
+            override fun onError(message: String) {}
         })
 
         voskManager = VoskWakeWordManager(this, "[\"똘똘\", \"똘똘아\"]", object : VoskWakeWordManager.WakeWordListener {
@@ -269,9 +293,30 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
         val textMt = "text/plain; charset=utf-8".toMediaTypeOrNull()
 
+        // 사용자 컨텍스트를 historyJson 앞에 시스템 메시지로 항상 삽입 (음성/텍스트 공통)
+        val contextLog = buildUserContext()
+        val historyWithContext = buildString {
+            append("[시스템 정보]\n$contextLog\n\n")
+            append(gson.toJson(conversationHistory))
+        }
+
         builder.addFormDataPart("userId", null, USER_ID.toRequestBody(textMt))
-        builder.addFormDataPart("historyJson", null, gson.toJson(conversationHistory).toRequestBody(textMt))
+        builder.addFormDataPart("historyJson", null, historyWithContext.toRequestBody(textMt))
         finalText?.let { builder.addFormDataPart("textPrompt", null, it.toRequestBody(textMt)) }
+
+        // mode 전송
+        val mode = if (isScheduleMode) "schedule" else "chat"
+        val urlBuilder = SERVER_URL.toHttpUrl().newBuilder().apply {
+            addQueryParameter("mode", mode)
+            if (isScheduleMode) {
+                addQueryParameter("scheduleTitle", scheduleTitle)
+                addQueryParameter("currentStep", scheduleSteps.getOrElse(currentStepIndex) { scheduleTitle })
+                addQueryParameter("stepIndex", currentStepIndex.toString())
+                addQueryParameter("totalSteps", scheduleSteps.size.toString())
+                addQueryParameter("specialNote", "$userSpecialNote ${scheduleNote}".trim())
+                addQueryParameter("stepsJson", gson.toJson(scheduleSteps))
+            }
+        }
 
         newBitmap?.let { bitmap ->
             val stream = ByteArrayOutputStream()
@@ -280,7 +325,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         }
         voice?.let { if (it.exists()) builder.addFormDataPart("voiceFile", it.name, it.asRequestBody("audio/m4a".toMediaTypeOrNull())) }
 
-        val request = Request.Builder().url(SERVER_URL).post(builder.build()).build()
+        val request = Request.Builder().url(urlBuilder.build()).post(builder.build()).build()
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 Log.e("ServerCheck", "네트워크 오류 발생: ${e.message}")
@@ -327,13 +372,18 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     for (i in 0 until suggestArray.length()) suggests.add(suggestArray.getString(i))
                 }
 
+                val stepComplete = result.optBoolean("stepComplete", false)
                 if (isScheduleMode) {
-                    val nextLabel = if (scheduleSteps.isNotEmpty() && currentStepIndex + 1 < scheduleSteps.size) "다음 단계로" else "완료"
-                    suggests.add(0, nextLabel)
+                    if (stepComplete) {
+                        // AI가 완료 감지 → 자동으로 다음 단계
+                        mainHandler.postDelayed({ proceedToNextStep() }, 1500)
+                    } else {
+                        val nextLabel = if (scheduleSteps.isNotEmpty() && currentStepIndex + 1 < scheduleSteps.size) "다음 단계로" else "완료"
+                        suggests.add(0, nextLabel)
+                    }
                 }
 
-                val userContent = conversationHistory.lastOrNull { it.role == "user" }?.message ?: ""
-                Thread { ScheduleRepository.logQuestionSuccess(ScheduleRepository.logQuestionStart(USER_ID, USER_IDX, userContent, answer)) }.start()
+                if (currentScheduleId > 0) ScheduleRepository.logQuestion(currentScheduleId.toLong())
 
                 addMsg(answer, UserChatMessage.TYPE_OTHER, false, null, suggests)
                 ttsManager.speak(answer)
@@ -354,10 +404,98 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         if (!manual) {
             ttsManager.speak("네, 말씀하세요.")
             mainHandler.postDelayed({
-                if (!isRecording && loadingBar.visibility != View.VISIBLE) voiceRecorder.start(5000)
+                if (!isRecording && loadingBar.visibility != View.VISIBLE) {
+                    isRecording = true
+                    updateMicButtonUI()
+                    addMsg("🎤 듣고 있습니다...", UserChatMessage.TYPE_MINE, false, null, null)
+                    voiceMsgIndex = chatList.size - 1
+                    startSpeechRecognition(scheduleMode = isScheduleMode)
+                }
             }, 1200)
         } else {
-            voiceRecorder.start(5000)
+            isRecording = true
+            updateMicButtonUI()
+            addMsg("🎤 듣고 있습니다...", UserChatMessage.TYPE_MINE, false, null, null)
+            voiceMsgIndex = chatList.size - 1
+            startSpeechRecognition(scheduleMode = isScheduleMode)
+        }
+    }
+
+    private fun startSpeechRecognition(scheduleMode: Boolean = false) {
+        speechRecognizer?.destroy()
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        }
+        speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+            override fun onResults(results: android.os.Bundle) {
+                isRecording = false
+                val matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val text = matches?.firstOrNull()
+                if (!text.isNullOrBlank()) {
+                    sttFailCount = 0
+                    updateVoiceStatus(text)
+                    if (scheduleMode) handleScheduleVoiceResult(text)
+                    else uploadToServer(null, null, text)
+                } else {
+                    sttFailCount++
+                    updateVoiceStatus("다시 말해줄래요?")
+                    if (scheduleMode) {
+                        if (sttFailCount >= 3) showScheduleFallbackButtons()
+                        else mainHandler.postDelayed({ startAutoScheduleListening() }, 1500)
+                    } else {
+                        resetToIdleState()
+                    }
+                }
+            }
+            override fun onError(error: Int) {
+                isRecording = false
+                Log.e("STT", "SpeechRecognizer 오류: $error")
+                sttFailCount++
+                updateVoiceStatus("잘 못 들었어요")
+                if (scheduleMode) {
+                    if (sttFailCount >= 3) showScheduleFallbackButtons()
+                    else mainHandler.postDelayed({ startAutoScheduleListening() }, 1500)
+                } else {
+                    resetToIdleState()
+                }
+            }
+            override fun onReadyForSpeech(params: android.os.Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onPartialResults(partialResults: android.os.Bundle?) {}
+            override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+        })
+        speechRecognizer?.startListening(intent)
+    }
+
+    private fun showScheduleFallbackButtons() {
+        sttFailCount = 0
+        val msg = "버튼을 눌러줘!"
+        addMsg(msg, UserChatMessage.TYPE_OTHER, false, null, mutableListOf("했어요", "모르겠어요"))
+        ttsManager.speak(msg)
+    }
+
+    private fun handleScheduleVoiceResult(text: String) {
+        val completionKeywords = listOf("응", "어", "네", "했어", "다 했어", "완료", "끝", "됐어", "했어요", "다했어", "했습니다", "다 했어요")
+        val retryKeywords = listOf("아니", "안 했어", "못 했어", "안했어", "못했어", "아직")
+
+        when {
+            completionKeywords.any { text.contains(it) } -> {
+                mainHandler.postDelayed({ proceedToNextStep() }, 500)
+            }
+            retryKeywords.any { text.contains(it) } -> {
+                // 안 했다 → 같은 단계 다시 안내
+                sendSchedulePromptToAI()
+            }
+            else -> {
+                // 질문이나 벗어난 말 → AI에게 전달, stepComplete: false로 돌아와 자동 재녹음
+                uploadToServer(null, null, text)
+            }
         }
     }
 
@@ -389,6 +527,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
     private fun buildUserContext(): String {
         val sb = StringBuilder("[사용자 정보]\n")
+        if (userName.isNotBlank()) sb.append("이름: $userName\n")
         if (userSpecialNote.isNotBlank()) sb.append("특이사항: $userSpecialNote\n")
         if (whitelistTaskNames.isNotEmpty()) {
             sb.append("보호자가 허용한 활동: ${whitelistTaskNames.joinToString(", ")}\n")
@@ -440,20 +579,16 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     }
 
     private fun buildSchedulePrompt(): String {
-        val userContext = buildUserContext()
-        val noteStr = if (scheduleNote.isNotBlank()) "참고사항: $scheduleNote\n" else ""
-        return if (scheduleSteps.isEmpty()) {
-            "$userContext\n[일정 수행 모드]\n일정: $scheduleTitle\n${noteStr}일정을 시작합니다."
-        } else {
-            val stepDesc = scheduleSteps[currentStepIndex]
-            "$userContext\n[일정 수행 모드]\n일정: $scheduleTitle\n단계: $stepDesc"
-        }
+        // 서버가 시스템 프롬프트 처리하므로 사용자 발화(시작 신호)만 전달
+        return if (currentStepIndex == 0) "일정 시작" else "계속해주세요"
     }
 
     private fun stepProgressLabel() = if (scheduleSteps.isEmpty()) "시작" else "(${currentStepIndex + 1}/${scheduleSteps.size}단계)"
 
     private fun proceedToNextStep() {
         if (!isScheduleMode) return
+        sttFailCount = 0
+        voiceMsgIndex = -1
         currentStepIndex++
         if (scheduleSteps.isEmpty() || currentStepIndex >= scheduleSteps.size) {
             finishSchedule()
@@ -507,6 +642,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         if (::voskManager.isInitialized) voskManager.stopListening()
         if (::voiceRecorder.isInitialized) voiceRecorder.release()
         if (::ttsManager.isInitialized) ttsManager.release()
+        speechRecognizer?.destroy()
     }
 
     private fun updateVoiceStatus(newText: String?) {
@@ -537,7 +673,8 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
     override fun onSuggestionClick(text: String?) {
         if (loadingBar.visibility == View.VISIBLE || isRecording || ttsManager.isSpeaking()) return
-        if (isScheduleMode && (text == "다음 단계로" || text == "완료")) { proceedToNextStep(); return }
+        if (isScheduleMode && (text == "다음 단계로" || text == "완료" || text == "했어요")) { proceedToNextStep(); return }
+        if (isScheduleMode && text == "모르겠어요") { startRecordingFlow(manual = true); return }
         voskManager.stopListening()
         voiceMsgIndex = -1
         addMsg(text, UserChatMessage.TYPE_MINE, false, null, null)

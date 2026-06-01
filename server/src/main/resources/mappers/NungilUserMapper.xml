@@ -11,6 +11,7 @@
         <result property="whiteList"   column="white_list"/>
         <result property="userName"    column="user_name"/>
         <result property="userPhone"   column="user_phone"/>
+        <result property="fcmToken"    column="fcm_token"/>
     </resultMap>
 
     <insert id="insert" parameterType="com.nungil.domain.user.NungilUserVO">
@@ -44,5 +45,14 @@
         UPDATE NUNGIL_USER SET user_name = #{userName}, user_phone = #{userPhone}
         WHERE id = #{id} AND idx = #{idx}
     </update>
+
+    <update id="updateFcmToken">
+        UPDATE NUNGIL_USER SET fcm_token = #{fcmToken}
+        WHERE id = #{id} AND idx = #{idx}
+    </update>
+
+    <delete id="deleteByGuardianId">
+        DELETE FROM NUNGIL_USER WHERE id = #{id}
+    </delete>
 
 </mapper>

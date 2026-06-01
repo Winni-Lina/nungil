@@ -44,6 +44,14 @@ public class FcmService implements InitializingBean {
     }
 
     /**
+     * 사용자 앱 일정 업데이트 알림 (알람 재등록 트리거)
+     */
+    public void sendScheduleUpdated(String fcmToken) {
+        if (fcmToken == null || fcmToken.isBlank()) return;
+        send(fcmToken, "SCHEDULE_UPDATED", "", "", "");
+    }
+
+    /**
      * NT-003: 일정 지연 알림
      */
     public void sendScheduleOverdue(String fcmToken, String userName, String userPhone, Long scheduleId) {

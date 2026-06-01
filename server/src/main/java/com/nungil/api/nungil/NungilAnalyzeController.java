@@ -27,30 +27,34 @@ public class NungilAnalyzeController {
     /** 통합 분석 API - 음성/이미지/텍스트 중 있는 것만 전송 */
     @PostMapping("/analyze")
     public Map<String, Object> analyze(
-            @RequestPart(value = "userId", required = false) String id, // userId 등이 담긴 JSON
-            @RequestPart(value = "historyJson", required = false) String historyJson,
-            @RequestPart(value = "voiceFile", required = false) MultipartFile voiceFile,
-            @RequestPart(value = "imageFile", required = false) MultipartFile imageFile,
-            @RequestParam(value = "textPrompt", required = false) String textPrompt,
-            @RequestParam(value = "scheduleId", required = false) Long scheduleId) {
+            @RequestPart(value = "userId",        required = false) String id,
+            @RequestPart(value = "historyJson",   required = false) String historyJson,
+            @RequestPart(value = "voiceFile",     required = false) MultipartFile voiceFile,
+            @RequestPart(value = "imageFile",     required = false) MultipartFile imageFile,
+            @RequestParam(value = "textPrompt",   required = false) String textPrompt,
+            @RequestParam(value = "scheduleId",   required = false) Long scheduleId,
+            @RequestParam(value = "mode",         required = false, defaultValue = "chat") String mode,
+            @RequestParam(value = "scheduleTitle",required = false, defaultValue = "") String scheduleTitle,
+            @RequestParam(value = "currentStep",  required = false, defaultValue = "") String currentStep,
+            @RequestParam(value = "stepIndex",    required = false, defaultValue = "0") int stepIndex,
+            @RequestParam(value = "totalSteps",   required = false, defaultValue = "0") int totalSteps,
+            @RequestParam(value = "specialNote",  required = false, defaultValue = "") String specialNote,
+            @RequestParam(value = "stepsJson",    required = false, defaultValue = "") String stepsJson) {
 
-        System.out.println("[API] POST /api/v1/nungil/analyze");
+        System.out.println("[API] POST /api/v1/question/analyze | mode=" + mode);
         Map<String, Object> response = new HashMap<>();
         String userId = "unknown";
 
         try {
-//            if (infoJson != null && !infoJson.isEmpty()) {
-//                Map<String, Object> info = objectMapper.readValue(infoJson, Map.class);
-//                userId = String.valueOf(info.getOrDefault("id", "unknown"));
-//            }
-        	
-        	if (id != null && !id.isEmpty()) {
-        		userId = id;
+            if (id != null && !id.isEmpty()) {
+                userId = id;
             }
-        	
-            Map<String, Object> result = orchestrator.execute(userId, historyJson, voiceFile, imageFile, textPrompt);
-            System.out.println("[결과] 분석 완료 userId=" + userId);
 
+            Map<String, Object> result = orchestrator.execute(
+                    userId, historyJson, voiceFile, imageFile, textPrompt,
+                    mode, scheduleTitle, currentStep, stepIndex, totalSteps, specialNote, stepsJson);
+
+            System.out.println("[결과] 분석 완료 userId=" + userId + ", mode=" + mode);
             response.put("status", "SUCCESS");
             response.put("result", result);
         } catch (Exception e) {

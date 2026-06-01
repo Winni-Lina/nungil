@@ -2,8 +2,7 @@ package com.nungil.api.nungil;
 
 import com.nungil.domain.guardian.GuardianService;
 import com.nungil.domain.guardian.GuardianVO;
-import com.nungil.domain.question.QuestionService;
-import com.nungil.domain.question.QuestionVO;
+import com.nungil.domain.schedule.ScheduleMapper;
 import com.nungil.domain.schedule.ScheduleService;
 import com.nungil.domain.schedule.ScheduleVO;
 import com.nungil.domain.task.TaskService;
@@ -22,18 +21,18 @@ public class NungilApiController {
     private final NungilUserService nungilUserService;
     private final TaskService taskService;
     private final ScheduleService scheduleService;
-    private final QuestionService questionService;
+    private final ScheduleMapper scheduleMapper;
 
     public NungilApiController(GuardianService guardianService,
                                 NungilUserService nungilUserService,
                                 TaskService taskService,
                                 ScheduleService scheduleService,
-                                QuestionService questionService) {
+                                ScheduleMapper scheduleMapper) {
         this.guardianService = guardianService;
         this.nungilUserService = nungilUserService;
         this.taskService = taskService;
         this.scheduleService = scheduleService;
-        this.questionService = questionService;
+        this.scheduleMapper = scheduleMapper;
     }
 
     /**
@@ -104,6 +103,7 @@ public class NungilApiController {
             Map<String, Object> result = new HashMap<>();
             result.put("userId", userId);
             result.put("userIdx", userIdx);
+            result.put("userName", user.getUserName() != null ? user.getUserName() : "");
             result.put("specialNote", user.getSpecialNote());
             result.put("whiteList", taskNames);
 
@@ -177,42 +177,19 @@ public class NungilApiController {
     }
 
     /**
-     * API 4-1: 질문 로그 시작
+     * API 4-1: 질문 발생 카운트
      * POST /api/v1/question/log
-     * Body: { "userId": "guardian01", "userIdx": 1, "content": "...", "answer": "..." }
+     * Body: { "scheduleId": 123 }
      */
     @PostMapping("/question/log")
-    public Map<String, Object> startQuestion(@RequestBody Map<String, Object> body) {
-        System.out.println("[API] POST /api/v1/question/log | userId=" + body.get("userId") + ", userIdx=" + body.get("userIdx"));
+    public Map<String, Object> logQuestion(@RequestBody Map<String, Object> body) {
+        System.out.println("[API] POST /api/v1/question/log | scheduleId=" + body.get("scheduleId"));
         Map<String, Object> response = new HashMap<>();
         try {
-            String userId  = (String) body.get("userId");
-            int    userIdx = Integer.parseInt(body.get("userIdx").toString());
-
-            // FK 오류 전에 유저 존재 여부 먼저 확인
-            NungilUserVO user = nungilUserService.getUser(userId, userIdx);
-            if (user == null) {
-                System.out.println("[ERROR] NUNGIL_USER 없음 (userId=" + userId + ", userIdx=" + userIdx + ") → USER_NOT_FOUND");
-                response.put("status", "ERROR");
-                response.put("errorCode", "USER_NOT_FOUND");
-                response.put("message", "등록된 사용자가 없어요. userId=" + userId + ", userIdx=" + userIdx);
-                return response;
-            }
-
-            QuestionVO question = new QuestionVO();
-            question.setId(userId);
-            question.setIdx(userIdx);
-            question.setContent((String) body.get("content"));
-            question.setAnswer((String) body.get("answer"));
-
-            questionService.create(question);
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("questionId", question.getQuestionId());
-
-            System.out.println("[결과] 질문 로그 생성 questionId=" + question.getQuestionId());
+            Long scheduleId = Long.parseLong(body.get("scheduleId").toString());
+            scheduleMapper.incrementQuestionCount(scheduleId);
+            System.out.println("[결과] question_count 증가 scheduleId=" + scheduleId);
             response.put("status", "SUCCESS");
-            response.put("result", result);
         } catch (Exception e) {
             System.out.println("[ERROR] " + e.getMessage());
             response.put("status", "ERROR");
@@ -250,6 +227,26 @@ public class NungilApiController {
     }
 
     /**
+     * API 5-1: 사용자 FCM 토큰 등록
+     * PUT /api/v1/user/fcm-token
+     */
+    @PutMapping("/user/fcm-token")
+    public Map<String, Object> updateUserFcmToken(@RequestBody Map<String, Object> body) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            String userId  = (String) body.get("userId");
+            int    userIdx = Integer.parseInt(body.get("userIdx").toString());
+            String token   = (String) body.get("fcmToken");
+            nungilUserService.updateFcmToken(userId, userIdx, token);
+            response.put("status", "SUCCESS");
+        } catch (Exception e) {
+            response.put("status", "ERROR");
+            response.put("message", e.getMessage());
+        }
+        return response;
+    }
+
+    /**
      * API 6: 기존 피보호자 목록 조회 (재연동용)
      * GET /api/v1/user/link/{guardianId}
      */
@@ -279,24 +276,4 @@ public class NungilApiController {
         return response;
     }
 
-    /**
-     * API 4-2: 질문 완료 처리
-     * PATCH /api/v1/question/log/{questionId}/complete
-     */
-    @PatchMapping("/question/log/{questionId}/complete")
-    public Map<String, Object> completeQuestion(@PathVariable("questionId") Long questionId) {
-        System.out.println("[API] PATCH /api/v1/question/log/" + questionId + "/complete");
-        Map<String, Object> response = new HashMap<>();
-        try {
-            questionService.complete(questionId);
-            System.out.println("[결과] 질문 완료 처리");
-            response.put("status", "SUCCESS");
-            response.put("message", "질문이 완료됐어요!");
-        } catch (Exception e) {
-            System.out.println("[ERROR] " + e.getMessage());
-            response.put("status", "ERROR");
-            response.put("message", e.getMessage());
-        }
-        return response;
-    }
 }

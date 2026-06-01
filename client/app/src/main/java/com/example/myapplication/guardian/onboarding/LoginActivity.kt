@@ -30,6 +30,13 @@ class LoginActivity : AppCompatActivity() {
         val pbLogin    = findViewById<ProgressBar>(R.id.pbLogin)
         val tvError    = findViewById<TextView>(R.id.tvError)
 
+        findViewById<TextView>(R.id.tvSignup).setOnClickListener {
+            startActivity(Intent(this, SignupActivity::class.java))
+        }
+        findViewById<TextView>(R.id.tvForgotPassword).setOnClickListener {
+            startActivity(Intent(this, ForgotPasswordActivity::class.java))
+        }
+
         btnLogin.setOnClickListener {
             val id  = etId.text.toString().trim()
             val pw  = etPassword.text.toString().trim()

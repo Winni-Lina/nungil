@@ -41,6 +41,13 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
+import com.example.myapplication.core.network.ApiClient
+import com.example.myapplication.core.network.ApiResult
+import com.example.myapplication.core.network.Session
+import com.example.myapplication.guardian.main.GuardianMainActivity
+import com.example.myapplication.guardian.onboarding.LoginActivity
+import com.example.myapplication.guardian.onboarding.WelcomeActivity
+import org.json.JSONObject
 
 @SuppressLint("CustomSplashScreen")
 class SplashActivity : AppCompatActivity() {
@@ -49,11 +56,39 @@ class SplashActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_splash)
 
-        // 1.5초 후 무조건 선택 화면(UserOrGuardianActivity)으로 이동
         Handler(Looper.getMainLooper()).postDelayed({
-            val intent = Intent(this, RoleSelectActivity::class.java)
-            startActivity(intent)
-            finish()
+            if (Session.isLoggedIn() && Session.isOnboarded) {
+                restoreSessionAndNavigate()
+            } else if (Session.isLoggedIn()) {
+                startActivity(Intent(this, WelcomeActivity::class.java))
+                finish()
+            } else {
+                startActivity(Intent(this, RoleSelectActivity::class.java))
+                finish()
+            }
         }, 1500)
+    }
+
+    private fun restoreSessionAndNavigate() {
+        ApiClient.get("/v1/user/link/${Session.guardianId}") { result ->
+            runOnUiThread {
+                if (result is ApiResult.Success) {
+                    try {
+                        val json = JSONObject(result.data)
+                        val arr = json.getJSONArray("result")
+                        if (arr.length() > 0) {
+                            Session.userIdx = arr.getJSONObject(0).getInt("userIdx")
+                            startActivity(Intent(this, GuardianMainActivity::class.java))
+                            finish()
+                            return@runOnUiThread
+                        }
+                    } catch (_: Exception) {}
+                }
+                // userIdx 복원 실패 → 로그인 화면으로
+                Session.logout()
+                startActivity(Intent(this, LoginActivity::class.java))
+                finish()
+            }
+        }
     }
 }

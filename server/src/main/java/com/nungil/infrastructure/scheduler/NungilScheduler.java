@@ -2,7 +2,7 @@ package com.nungil.infrastructure.scheduler;
 
 import com.nungil.domain.guardian.GuardianService;
 import com.nungil.domain.guardian.GuardianVO;
-import com.nungil.domain.question.QuestionMapper;
+import com.nungil.domain.schedule.ScheduleMapper;
 import com.nungil.domain.schedule.ScheduleService;
 import com.nungil.domain.schedule.ScheduleVO;
 import com.nungil.domain.user.NungilUserService;
@@ -20,24 +20,23 @@ import java.util.Set;
 public class NungilScheduler {
 
     private final ScheduleService scheduleService;
+    private final ScheduleMapper scheduleMapper;
     private final GuardianService guardianService;
     private final NungilUserService nungilUserService;
-    private final QuestionMapper questionMapper;
     private final FcmService fcmService;
 
-    // 이미 알림 보낸 ID 추적 (서버 재시작 시 초기화)
     private final Set<Long> notifiedScheduleIds = new HashSet<>();
-    private final Set<String> notifiedRepeatKeys = new HashSet<>(); // "id:idx"
+    private final Set<String> notifiedRepeatKeys = new HashSet<>();
 
     public NungilScheduler(ScheduleService scheduleService,
+                            ScheduleMapper scheduleMapper,
                             GuardianService guardianService,
                             NungilUserService nungilUserService,
-                            QuestionMapper questionMapper,
                             FcmService fcmService) {
         this.scheduleService = scheduleService;
+        this.scheduleMapper = scheduleMapper;
         this.guardianService = guardianService;
         this.nungilUserService = nungilUserService;
-        this.questionMapper = questionMapper;
         this.fcmService = fcmService;
     }
 
@@ -75,7 +74,7 @@ public class NungilScheduler {
     @Scheduled(fixedRate = 300000)
     public void checkRepeatQuestions() {
         try {
-            List<Map<String, Object>> repeatUsers = questionMapper.findRecentRepeatUsers();
+            List<Map<String, Object>> repeatUsers = scheduleMapper.findRecentRepeatUsers();
             for (Map<String, Object> row : repeatUsers) {
                 String id  = String.valueOf(row.get("ID"));
                 int    idx = ((Number) row.get("IDX")).intValue();

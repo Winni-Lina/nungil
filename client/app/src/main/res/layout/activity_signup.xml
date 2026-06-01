@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bgPage">
+
+    <!-- 상단 AppBar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="4dp"
+        android:background="@color/bgCard"
+        android:elevation="2dp">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@android:drawable/ic_menu_revert"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="@color/textPrimary"
+            android:contentDescription="뒤로"/>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="회원가입"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/textPrimary"
+            android:gravity="center"/>
+
+        <View android:layout_width="48dp" android:layout_height="48dp"/>
+
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="24dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <EditText
+                android:id="@+id/etId"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:hint="아이디 (영문/숫자)"
+                android:textSize="15sp"
+                android:background="@drawable/bg_input_dark"
+                android:paddingStart="16dp"
+                android:inputType="text"
+                android:layout_marginBottom="12dp"/>
+
+            <EditText
+                android:id="@+id/etPw"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:hint="비밀번호"
+                android:textSize="15sp"
+                android:background="@drawable/bg_input_dark"
+                android:paddingStart="16dp"
+                android:inputType="textPassword"
+                android:layout_marginBottom="12dp"/>
+
+            <EditText
+                android:id="@+id/etPwConfirm"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:hint="비밀번호 확인"
+                android:textSize="15sp"
+                android:background="@drawable/bg_input_dark"
+                android:paddingStart="16dp"
+                android:inputType="textPassword"
+                android:layout_marginBottom="12dp"/>
+
+            <EditText
+                android:id="@+id/etName"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:hint="이름"
+                android:textSize="15sp"
+                android:background="@drawable/bg_input_dark"
+                android:paddingStart="16dp"
+                android:inputType="textPersonName"
+                android:layout_marginBottom="12dp"/>
+
+            <EditText
+                android:id="@+id/etEmail"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:hint="이메일 (비밀번호 찾기에 사용)"
+                android:textSize="15sp"
+                android:background="@drawable/bg_input_dark"
+                android:paddingStart="16dp"
+                android:inputType="textEmailAddress"
+                android:layout_marginBottom="12dp"/>
+
+            <EditText
+                android:id="@+id/etPhone"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:hint="전화번호 (선택)"
+                android:textSize="15sp"
+                android:background="@drawable/bg_input_dark"
+                android:paddingStart="16dp"
+                android:inputType="phone"
+                android:layout_marginBottom="24dp"/>
+
+            <Button
+                android:id="@+id/btnSignup"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="가입하기"
+                android:textSize="16sp"/>
+
+            <ProgressBar
+                android:id="@+id/pbSignup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginTop="16dp"
+                android:visibility="gone"/>
+
+            <TextView
+                android:id="@+id/tvError"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="13sp"
+                android:textColor="@color/colorError"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:layout_gravity="center"
+                android:visibility="gone"/>
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

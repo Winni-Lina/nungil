@@ -34,6 +34,7 @@ object ScheduleRepository {
     )
 
     data class UserInfo(
+        val userName: String,
         val specialNote: String,
         val whitelistTaskNames: List<String>
     )
@@ -63,17 +64,18 @@ object ScheduleRepository {
         if (USE_DUMMY) return dummyUserInfo()
         return try {
             val root = JSONObject(get("$BASE_URL/user/$userId/$userIdx"))
-            if (root.optString("status") != "SUCCESS") return UserInfo("", emptyList())
+            if (root.optString("status") != "SUCCESS") return UserInfo("", "", emptyList())
             val result   = root.getJSONObject("result")
             val tasksArr = result.optJSONArray("whiteList")
             val tasks    = (0 until (tasksArr?.length() ?: 0)).map { tasksArr!!.getString(it) }
             UserInfo(
+                userName           = result.optString("userName", ""),
                 specialNote        = result.optString("specialNote", ""),
                 whitelistTaskNames = tasks
             )
         } catch (e: Exception) {
             Log.e("ScheduleRepo", "사용자 정보 조회 실패: ${e.message}")
-            UserInfo("", emptyList())
+            UserInfo("", "", emptyList())
         }
     }
 
@@ -132,34 +134,18 @@ object ScheduleRepository {
         }.start()
     }
 
-    // ── API 4-1: 질문 로그 시작 ─────────────────────────────────────────────
+    // ── API 4-1: 질문 발생 카운트 ───────────────────────────────────────────
     // POST /api/v1/question/log
 
-    fun logQuestionStart(userId: String, userIdx: Int, content: String, answer: String): Int {
-        if (USE_DUMMY) return (System.currentTimeMillis() % 10000).toInt()
-        return try {
-            val json = JSONObject()
-                .put("userId",  userId)
-                .put("userIdx", userIdx)
-                .put("content", content)
-                .put("answer",  answer)
-            val res = JSONObject(post("$BASE_URL/question/log", json))
-            if (res.optString("status") != "SUCCESS") return -1
-            res.getJSONObject("result").optInt("questionId", -1)
-        } catch (e: Exception) {
-            Log.e("ScheduleRepo", "질문 기록 실패: ${e.message}")
-            -1
-        }
-    }
-
-    // ── API 4-2: 질문 완료 처리 ─────────────────────────────────────────────
-    // PATCH /api/v1/question/log/{questionId}/complete
-
-    fun logQuestionSuccess(questionId: Int) {
-        if (questionId < 0) return
+    fun logQuestion(scheduleId: Long) {
+        if (USE_DUMMY) return
         Thread {
-            try { patch("$BASE_URL/question/log/$questionId/complete") }
-            catch (e: Exception) { Log.e("ScheduleRepo", "질문 완료 처리 실패: ${e.message}") }
+            try {
+                val json = JSONObject().put("scheduleId", scheduleId)
+                post("$BASE_URL/question/log", json)
+            } catch (e: Exception) {
+                Log.e("ScheduleRepo", "질문 카운트 실패: ${e.message}")
+            }
         }.start()
     }
 
@@ -203,6 +189,7 @@ object ScheduleRepository {
     // ── 더미 데이터 ──────────────────────────────────────────────────────────
 
     private fun dummyUserInfo() = UserInfo(
+        userName           = "",
         specialNote        = "큰 소리를 무서워함. 차분하게 말해주세요.",
         whitelistTaskNames = listOf("약 먹기", "손 씻기", "양치하기", "운동하기")
     )

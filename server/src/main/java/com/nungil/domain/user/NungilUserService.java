@@ -80,6 +80,16 @@ public class NungilUserService {
         System.out.println("[DB] NUNGIL_USER UPDATE special_note (id=" + guardianId + ", idx=" + idx + ")");
     }
 
+    public void updateFcmToken(String guardianId, int idx, String fcmToken) {
+        nungilUserMapper.updateFcmToken(guardianId, idx, fcmToken);
+        System.out.println("[DB] NUNGIL_USER UPDATE fcm_token (id=" + guardianId + ", idx=" + idx + ")");
+    }
+
+    public String getFcmToken(String guardianId, int idx) {
+        NungilUserVO user = nungilUserMapper.findByIdAndIdx(guardianId, idx);
+        return user != null ? user.getFcmToken() : null;
+    }
+
     private List<Long> parseWhiteList(String whiteList) {
         List<Long> result = new ArrayList<>();
         if (whiteList == null || whiteList.trim().isEmpty()) return result;
