@@ -3,6 +3,7 @@ package com.example.myapplication.guardian.schedule.data
 import com.example.myapplication.core.network.ApiClient
 import com.example.myapplication.core.network.ApiResult
 import com.example.myapplication.core.network.Session
+import com.example.myapplication.core.util.DateParseUtil
 import com.example.myapplication.model.Schedule
 import com.example.myapplication.model.Task
 import org.json.JSONObject
@@ -53,7 +54,7 @@ class ScheduleRepository {
                                     taskId      = obj.getInt("taskId"),
                                     taskName    = obj.getString("taskName"),
                                     status      = obj.getString("status"),
-                                    scheduledAt = parseScheduledAt(obj),
+                                    scheduledAt = DateParseUtil.parseScheduledAtIso(obj),
                                     location    = obj.optString("location", ""),
                                     specialNote = obj.optString("specialNote", ""),
                                     taskProcess = steps
@@ -74,31 +75,7 @@ class ScheduleRepository {
         }
     }
 
-    /**
-     * 서버가 scheduledAt을 두 형태로 내릴 수 있음:
-     *   - 문자열: "2026-05-01T14:00:00"
-     *   - 배열:   [2026, 5, 1, 14, 0]   ← Jackson WRITE_DATES_AS_TIMESTAMPS=true 일 때
-     */
-    private fun parseScheduledAt(obj: org.json.JSONObject): String {
-        return try {
-            val raw = obj.get("scheduledAt")
-            if (raw is String) {
-                raw
-            } else {
-                // JSONArray [year, month, day, hour, minute(, second)]
-                val arr = obj.getJSONArray("scheduledAt")
-                val year  = arr.getInt(0)
-                val month = arr.getInt(1)
-                val day   = arr.getInt(2)
-                val hour  = arr.getInt(3)
-                val min   = if (arr.length() > 4) arr.getInt(4) else 0
-                "%04d-%02d-%02dT%02d:%02d:00".format(year, month, day, hour, min)
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("ScheduleRepo", "scheduledAt 파싱 실패: ${e.message}")
-            ""
-        }
-    }
+    // scheduledAt 파싱은 DateParseUtil.parseScheduledAtIso() 참조
 
     fun deleteSchedule(scheduleId: Int, onResult: (ApiResult<Boolean>) -> Unit) {
         ApiClient.delete("/v1/guardian/schedules/$scheduleId") { result ->

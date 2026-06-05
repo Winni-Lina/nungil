@@ -79,7 +79,6 @@ class ScheduleFragment : Fragment() {
 
         // RecyclerView
         adapter = ScheduleAdapter(
-            mutableListOf(),
             onDelete = { schedule -> confirmDelete(schedule) },
             onEdit   = { schedule -> showEditDialog(schedule) }
         )

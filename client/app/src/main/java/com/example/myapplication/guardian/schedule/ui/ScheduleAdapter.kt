@@ -1,49 +1,55 @@
 package com.example.myapplication.guardian.schedule.ui
+
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.example.myapplication.R
 import com.example.myapplication.model.Schedule
 
 class ScheduleAdapter(
-    private val list: MutableList<Schedule>,
     private val onDelete: (Schedule) -> Unit = {},
-    private val onEdit: (Schedule) -> Unit = {}
-) : RecyclerView.Adapter<ScheduleAdapter.ViewHolder>() {
+    private val onEdit:   (Schedule) -> Unit = {}
+) : ListAdapter<Schedule, ScheduleAdapter.ViewHolder>(DIFF_CALLBACK) {
 
-    class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val tvTaskName: TextView   = view.findViewById(R.id.tvTaskName)
-        val tvTimeHour: TextView   = view.findViewById(R.id.tvTimeHour)
-        val tvTimeDateOnly: TextView = view.findViewById(R.id.tvTimeDateOnly)
-        val tvStatus: TextView     = view.findViewById(R.id.tvStatus)
-        val btnDelete: ImageButton = view.findViewById(R.id.btnDelete)
+    companion object {
+        private val DIFF_CALLBACK = object : DiffUtil.ItemCallback<Schedule>() {
+            override fun areItemsTheSame(oldItem: Schedule, newItem: Schedule) =
+                oldItem.scheduleId == newItem.scheduleId
+            override fun areContentsTheSame(oldItem: Schedule, newItem: Schedule) =
+                oldItem == newItem
+        }
     }
 
-    fun updateList(newList: List<Schedule>) {
-        list.clear()
-        list.addAll(newList)
-        notifyDataSetChanged()
+    /** 기존 호출부(ScheduleFragment.adapter.updateList)와 인터페이스 유지 */
+    fun updateList(newList: List<Schedule>) = submitList(newList)
+
+    class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val tvTaskName:    TextView    = view.findViewById(R.id.tvTaskName)
+        val tvTimeHour:    TextView    = view.findViewById(R.id.tvTimeHour)
+        val tvTimeDateOnly:TextView    = view.findViewById(R.id.tvTimeDateOnly)
+        val tvStatus:      TextView    = view.findViewById(R.id.tvStatus)
+        val btnDelete:     ImageButton = view.findViewById(R.id.btnDelete)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
         ViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_schedule, parent, false))
 
-    override fun getItemCount() = list.size
-
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val s = list[position]
+        val s = getItem(position)
         holder.tvTaskName.text = s.taskName
 
-        // scheduledAt 파싱: "2025-01-15T14:30:00" 형태
+        // scheduledAt 파싱: "2025-01-15T14:30:00" 형태 (T 없는 포맷 방어 처리)
         if (s.scheduledAt.contains("T")) {
             val parts = s.scheduledAt.split("T")
-            holder.tvTimeDateOnly.text = parts[0]          // "2025-01-15"
-            holder.tvTimeHour.text = parts[1].take(5)      // "14:30"
+            holder.tvTimeDateOnly.text = parts.getOrNull(0) ?: ""
+            holder.tvTimeHour.text     = parts.getOrNull(1)?.take(5) ?: ""
         } else {
-            holder.tvTimeHour.text = s.scheduledAt.take(5)
+            holder.tvTimeHour.text     = s.scheduledAt.take(5)
             holder.tvTimeDateOnly.text = ""
         }
 

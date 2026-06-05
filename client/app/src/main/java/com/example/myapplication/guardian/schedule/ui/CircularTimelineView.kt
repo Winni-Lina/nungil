@@ -3,6 +3,7 @@ package com.example.myapplication.guardian.schedule.ui
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import com.example.myapplication.model.Schedule
@@ -178,7 +179,9 @@ class CircularTimelineView @JvmOverloads constructor(
             val name = if (s.taskName.length > 4) s.taskName.take(4) + "…" else s.taskName
             canvas.drawText(name, lx, ly + blockLabelPaint.textSize / 3, blockLabelPaint)
 
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.e("CircularTimelineView", "drawBlock error: scheduleId=${s.scheduleId}", e)
+        }
     }
 
     private fun drawNowHand(canvas: Canvas) {

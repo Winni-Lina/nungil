@@ -189,7 +189,7 @@ class ScheduleAddActivity : AppCompatActivity() {
     }
 
     private fun loadTaskSteps(taskId: Int) {
-        llSteps.visibility = View.GONE
+        llSteps.visibility        = View.GONE
         llSteps.removeAllViews()
         tvStepTimeout.visibility  = View.GONE
         pbStepsLoading.visibility = View.VISIBLE
@@ -199,25 +199,26 @@ class ScheduleAddActivity : AppCompatActivity() {
 
         repository.getTaskSteps(taskId) { result ->
             handler.removeCallbacks(timeoutRunnable)
-            runOnUiThread {
-                pbStepsLoading.visibility = View.GONE
-                when (result) {
-                    is ApiResult.Success -> {
-                        if (result.data.isEmpty()) return@runOnUiThread
-                        llSteps.visibility = View.VISIBLE
-                        result.data.forEachIndexed { i, step ->
-                            val tv = TextView(this).apply {
-                                text      = "${i + 1}. $step"
-                                textSize  = 12f
-                                setTextColor(0xFF444444.toInt())
-                                setPadding(0, 6, 0, 6)
-                            }
-                            llSteps.addView(tv)
-                        }
-                    }
-                    is ApiResult.Error -> { /* 단계 없어도 등록 가능 */ }
+            runOnUiThread { onTaskStepsLoaded(result) }
+        }
+    }
+
+    private fun onTaskStepsLoaded(result: ApiResult<List<String>>) {
+        pbStepsLoading.visibility = View.GONE
+        when (result) {
+            is ApiResult.Success -> {
+                if (result.data.isEmpty()) return
+                llSteps.visibility = View.VISIBLE
+                result.data.forEachIndexed { i, step ->
+                    llSteps.addView(TextView(this).apply {
+                        text     = "${i + 1}. $step"
+                        textSize = 12f
+                        setTextColor(0xFF444444.toInt())
+                        setPadding(0, 6, 0, 6)
+                    })
                 }
             }
+            is ApiResult.Error -> { /* 단계 없어도 등록 가능 */ }
         }
     }
 
@@ -234,12 +235,13 @@ class ScheduleAddActivity : AppCompatActivity() {
     }
 
     private fun startRecording() {
-        recordingFile = File(cacheDir, "note_${System.currentTimeMillis()}.m4a")
+        val file = File(cacheDir, "note_${System.currentTimeMillis()}.m4a")
+        recordingFile = file
         mediaRecorder = MediaRecorder().apply {
             setAudioSource(MediaRecorder.AudioSource.MIC)
             setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            setOutputFile(recordingFile!!.absolutePath)
+            setOutputFile(file.absolutePath)  // 로컬 변수 사용 — !! 불필요
             prepare(); start()
         }
         isRecording = true
@@ -253,22 +255,27 @@ class ScheduleAddActivity : AppCompatActivity() {
         btnRecord.setImageResource(android.R.drawable.ic_btn_speak_now)
 
         val file = recordingFile ?: return
-        tvAnalyzeResult.text = "분석 중..."; tvAnalyzeResult.visibility = View.VISIBLE
+        tvAnalyzeResult.text      = "분석 중..."
+        tvAnalyzeResult.visibility = View.VISIBLE
 
         ApiClient.postAudioFile("/v1/nungil/analyze", file) { result ->
-            runOnUiThread {
-                when (result) {
-                    is ApiResult.Success -> {
-                        try {
-                            val json = JSONObject(result.data)
-                            val text = json.optString("result", json.optString("text", result.data))
-                            tvAnalyzeResult.text = "📝 $text"
-                            etNote.setText(text)
-                        } catch (_: Exception) { tvAnalyzeResult.text = result.data }
-                    }
-                    is ApiResult.Error -> tvAnalyzeResult.text = "분석 실패: ${result.message}"
+            runOnUiThread { onAnalyzeResult(result) }
+        }
+    }
+
+    private fun onAnalyzeResult(result: ApiResult<String>) {
+        when (result) {
+            is ApiResult.Success -> {
+                try {
+                    val json = JSONObject(result.data)
+                    val text = json.optString("result", json.optString("text", result.data))
+                    tvAnalyzeResult.text = "📝 $text"
+                    etNote.setText(text)
+                } catch (_: Exception) {
+                    tvAnalyzeResult.text = result.data
                 }
             }
+            is ApiResult.Error -> tvAnalyzeResult.text = "분석 실패: ${result.message}"
         }
     }
 
