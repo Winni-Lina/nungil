@@ -76,7 +76,8 @@
 
 ## ERD
 
-> <img width="3621" height="2361" alt="눈길_ERD" src="https://github.com/user-attachments/assets/05fc6f13-4981-406d-9259-99e453717fbf" />
+> <img width="1845" height="828" alt="image" src="https://github.com/user-attachments/assets/a15adb92-48c9-48db-9da3-72bd58efc4e3" />
+
 
 
 ---
