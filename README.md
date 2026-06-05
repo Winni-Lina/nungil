@@ -1,3 +1,4 @@
+[눈길_통합SRS_v3_0.xlsx](https://github.com/user-attachments/files/28619915/_.SRS_v3_0.xlsx)
 # 눈길 (Nungil)
 
 > 지적장애인과 보호자를 연결하는 AI 기반 일상 지원 앱
@@ -68,13 +69,15 @@
 
 ## SRS
 
-> 추후 추가 예정
+> [눈길_통합SRS_v3_0.xlsx](https://github.com/user-attachments/files/28619923/_.SRS_v3_0.xlsx)
+
 
 ---
 
 ## ERD
 
-> 추후 추가 예정
+> <img width="3621" height="2361" alt="눈길_ERD" src="https://github.com/user-attachments/assets/05fc6f13-4981-406d-9259-99e453717fbf" />
+
 
 ---
 
