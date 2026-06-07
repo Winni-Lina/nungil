@@ -15,6 +15,7 @@
         <result property="successAt"    column="success_at"/>
         <result property="location"     column="location"/>
         <result property="specialNote"  column="special_note"/>
+        <result property="customSteps"  column="custom_steps"/>
         <result property="questionCount"   column="question_count"/>
         <result property="lastQuestionAt" column="last_question_at"/>
         <result property="taskName"       column="task_name"/>
@@ -22,8 +23,8 @@
     </resultMap>
 
     <insert id="insert" parameterType="com.nungil.domain.schedule.ScheduleVO">
-        INSERT INTO SCHEDULE (task_id, id, idx, status, scheduled_at, location, special_note)
-        VALUES (#{taskId}, #{id}, #{idx}, 'pending', #{scheduledAt}, #{location}, #{specialNote})
+        INSERT INTO SCHEDULE (task_id, id, idx, status, scheduled_at, location, special_note, custom_steps)
+        VALUES (#{taskId}, #{id}, #{idx}, 'pending', #{scheduledAt}, #{location}, #{specialNote}, #{customSteps})
     </insert>
 
     <select id="findById" resultMap="ScheduleResultMap">
@@ -73,6 +74,10 @@
     </select>
 
     <!-- API 3-1: 오늘 이후 pending 일정 + 과업 단계 포함 -->
+    <update id="updateCustomSteps">
+        UPDATE SCHEDULE SET custom_steps = #{customSteps} WHERE schedule_id = #{scheduleId}
+    </update>
+
     <select id="findTodayPendingByUser" resultMap="ScheduleResultMap">
         SELECT s.*, t.name AS task_name, t.process AS task_process
         FROM SCHEDULE s

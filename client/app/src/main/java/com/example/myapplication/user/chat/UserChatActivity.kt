@@ -344,10 +344,10 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                 val result = root.getJSONObject("result")
                 shouldLaunchCamera = result.optBoolean("photoRequest", false)
 
+                // transcribedText는 화면 표시만 (히스토리 추가는 uploadToServer에서 이미 처리됨 → 중복 방지)
                 val transcribed = result.optString("transcribedText", "")
                 if (transcribed.isNotEmpty()) {
                     updateVoiceStatus(transcribed)
-                    conversationHistory.add(UserChatLog("user", transcribed))
                 }
 
                 val answer = result.optString("answer", "")
@@ -359,15 +359,10 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     for (i in 0 until suggestArray.length()) suggests.add(suggestArray.getString(i))
                 }
 
-                val stepComplete = result.optBoolean("stepComplete", false)
+                // 단계 완료는 클라이언트 키워드/버튼으로만 결정 (stepComplete 의존 제거)
                 if (isScheduleMode) {
-                    if (stepComplete) {
-                        // AI가 완료 감지 → 자동으로 다음 단계
-                        mainHandler.postDelayed({ proceedToNextStep() }, 1500)
-                    } else {
-                        val nextLabel = if (scheduleSteps.isNotEmpty() && currentStepIndex + 1 < scheduleSteps.size) "다음 단계로" else "완료"
-                        suggests.add(0, nextLabel)
-                    }
+                    val nextLabel = if (scheduleSteps.isNotEmpty() && currentStepIndex + 1 < scheduleSteps.size) "다음 단계로" else "완료"
+                    suggests.add(0, nextLabel)
                 }
 
                 if (currentScheduleId > 0) ScheduleRepository.logQuestion(currentScheduleId.toLong())
@@ -483,7 +478,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                 sendSchedulePromptToAI()
             }
             else -> {
-                // 질문이나 벗어난 말 → AI에게 전달, stepComplete: false로 돌아와 자동 재녹음
+                // 질문이나 벗어난 말 → AI에게 전달(안내/답변만 받음). 완료는 클라이언트가 결정.
                 uploadToServer(null, null, text)
             }
         }
@@ -590,11 +585,59 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
     private fun finishSchedule() {
         ScheduleRepository.completeSchedule(currentScheduleId)
+        val finishedTitle = scheduleTitle
+        val historyJson = gson.toJson(conversationHistory)
         currentStepIndex = -1; currentScheduleId = -1
         setBearMood(BearMood.PRAISE)
-        val doneMsg = "수고했어요! 일정을 완료했어요."
-        addMsg(doneMsg, UserChatMessage.TYPE_OTHER, false, null, null)
-        ttsManager.speak(doneMsg)
+
+        // 기본 완료 메시지 먼저 표시, 서버 요약 도착하면 교체
+        val defaultMsg = "수고했어요! 일정을 완료했어요."
+        addMsg(defaultMsg, UserChatMessage.TYPE_OTHER, false, null, null)
+        val summaryMsgIndex = chatList.size - 1
+        ttsManager.speak(defaultMsg)
+
+        requestScheduleSummary(finishedTitle, historyJson) { summary ->
+            runOnUiThread {
+                if (summary.isNotBlank() && summaryMsgIndex < chatList.size) {
+                    chatList[summaryMsgIndex].content = summary
+                    adapter.notifyItemChanged(summaryMsgIndex)
+                    conversationHistory.add(UserChatLog("AI", summary))
+                    ttsManager.speak(summary)
+                }
+            }
+        }
+    }
+
+    /** 서버에 완료 요약 요청 */
+    private fun requestScheduleSummary(title: String, historyJson: String, onResult: (String) -> Unit) {
+        val url = AppConfig.BASE_URL + "api/v1/question/summarize"
+        val bodyJson = JSONObject().apply {
+            put("userId", USER_ID)
+            put("scheduleTitle", title)
+            put("historyJson", historyJson)
+        }.toString()
+        val request = Request.Builder()
+            .url(url)
+            .post(bodyJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+            .build()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("ScheduleSummary", "요약 요청 실패: ${e.message}")
+                onResult("")
+            }
+            override fun onResponse(call: Call, response: Response) {
+                try {
+                    val body = response.body?.string() ?: ""
+                    val root = JSONObject(body)
+                    if (root.optString("status") == "SUCCESS") {
+                        onResult(root.optString("message", ""))
+                    } else onResult("")
+                } catch (e: Exception) {
+                    Log.e("ScheduleSummary", "요약 파싱 실패: ${e.message}")
+                    onResult("")
+                }
+            }
+        })
     }
 
     override fun onStart() {

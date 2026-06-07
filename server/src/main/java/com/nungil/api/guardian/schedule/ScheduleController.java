@@ -2,8 +2,12 @@ package com.nungil.api.guardian.schedule;
 
 import com.nungil.domain.schedule.ScheduleService;
 import com.nungil.domain.schedule.ScheduleVO;
+import com.nungil.domain.task.TaskService;
+import com.nungil.domain.task.TaskVO;
 import com.nungil.domain.user.NungilUserService;
+import com.nungil.domain.user.NungilUserVO;
 import com.nungil.infrastructure.firebase.FcmService;
+import com.nungil.infrastructure.google.StepGenerationService;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -18,13 +22,19 @@ public class ScheduleController {
     private final ScheduleService scheduleService;
     private final NungilUserService nungilUserService;
     private final FcmService fcmService;
+    private final TaskService taskService;
+    private final StepGenerationService stepGenerationService;
 
     public ScheduleController(ScheduleService scheduleService,
                                NungilUserService nungilUserService,
-                               FcmService fcmService) {
+                               FcmService fcmService,
+                               TaskService taskService,
+                               StepGenerationService stepGenerationService) {
         this.scheduleService = scheduleService;
         this.nungilUserService = nungilUserService;
         this.fcmService = fcmService;
+        this.taskService = taskService;
+        this.stepGenerationService = stepGenerationService;
     }
 
     /** 일정 등록 POST /api/v1/guardian/schedules
@@ -43,6 +53,16 @@ public class ScheduleController {
             schedule.setLocation((String) body.get("location"));         // SC-004
             schedule.setSpecialNote((String) body.get("specialNote"));   // SC-005
 
+            // AI 생성/편집된 맞춤 단계 (List<String> 또는 JSON 문자열, nullable)
+            Object customStepsObj = body.get("customSteps");
+            if (customStepsObj instanceof List) {
+                schedule.setCustomSteps(new com.fasterxml.jackson.databind.ObjectMapper()
+                        .writeValueAsString(customStepsObj));
+            } else if (customStepsObj instanceof String) {
+                String cs = ((String) customStepsObj).trim();
+                schedule.setCustomSteps(cs.isEmpty() ? null : cs);
+            }
+
             scheduleService.create(schedule);
 
             // FCM으로 사용자 앱에 알림
@@ -52,6 +72,44 @@ public class ScheduleController {
             System.out.println("[결과] 일정 등록 완료 scheduleId=" + schedule.getScheduleId());
             response.put("status", "SUCCESS");
             response.put("message", "일정이 등록됐어요!");
+        } catch (Exception e) {
+            System.out.println("[ERROR] " + e.getMessage());
+            response.put("status", "ERROR");
+            response.put("message", e.getMessage());
+        }
+        return response;
+    }
+
+    /** AI 맞춤 단계 생성 POST /api/v1/guardian/schedules/generate-steps
+     *  Body: { taskId, location, scheduleNote, guardianId, idx }
+     *  Return: { status: "SUCCESS", steps: ["단계1", "단계2", ...] }
+     */
+    @PostMapping("/generate-steps")
+    public Map<String, Object> generateSteps(@RequestBody Map<String, Object> body) {
+        System.out.println("[API] POST /api/v1/guardian/schedules/generate-steps | taskId=" + body.get("taskId"));
+        Map<String, Object> response = new HashMap<>();
+        try {
+            Long taskId = Long.valueOf(body.get("taskId").toString());
+            String location = (String) body.get("location");
+            String scheduleNote = (String) body.get("scheduleNote");
+            String guardianId = (String) body.get("guardianId");
+            int idx = body.get("idx") != null ? Integer.parseInt(body.get("idx").toString()) : 0;
+
+            TaskVO task = taskService.findById(taskId);
+            String taskProcess = task != null ? task.getProcess() : null;
+
+            String userSpecialNote = null;
+            if (guardianId != null && !guardianId.isEmpty()) {
+                NungilUserVO user = nungilUserService.getUser(guardianId, idx);
+                if (user != null) userSpecialNote = user.getSpecialNote();
+            }
+
+            List<String> steps = stepGenerationService.generatePersonalizedSteps(
+                    taskProcess, location, scheduleNote, userSpecialNote);
+
+            System.out.println("[결과] 맞춤 단계 " + steps.size() + "개 생성");
+            response.put("status", "SUCCESS");
+            response.put("steps", steps);
         } catch (Exception e) {
             System.out.println("[ERROR] " + e.getMessage());
             response.put("status", "ERROR");

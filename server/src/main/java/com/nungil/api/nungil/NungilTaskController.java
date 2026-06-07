@@ -1,6 +1,5 @@
 package com.nungil.api.nungil;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nungil.domain.task.TaskService;
 import com.nungil.domain.task.TaskVO;
 import com.nungil.infrastructure.google.GeminiRestAdapter;
@@ -15,7 +14,6 @@ public class NungilTaskController {
 
     private final TaskService taskService;
     private final GeminiRestAdapter geminiRestAdapter;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public NungilTaskController(TaskService taskService, GeminiRestAdapter geminiRestAdapter) {
         this.taskService = taskService;
@@ -102,35 +100,4 @@ public class NungilTaskController {
         return response;
     }
 
-    /**
-     * 과업 단계 조회
-     * GET /api/tasks/{taskId}/steps
-     */
-    @GetMapping("/{taskId}/steps")
-    public Map<String, Object> getSteps(@PathVariable("taskId") Long taskId) {
-        System.out.println("[API] GET /api/tasks/" + taskId + "/steps");
-        Map<String, Object> response = new HashMap<>();
-        try {
-            TaskVO task = taskService.findById(taskId);
-            if (task == null) {
-                response.put("steps", Collections.emptyList());
-                return response;
-            }
-
-            List<?> steps = Collections.emptyList();
-            if (task.getProcess() != null && !task.getProcess().trim().isEmpty()) {
-                steps = objectMapper.readValue(task.getProcess(), List.class);
-            }
-
-            System.out.println("[결과] " + task.getName() + " steps=" + steps.size() + "개");
-            response.put("taskId", task.getTaskId());
-            response.put("taskName", task.getName());
-            response.put("steps", steps);
-        } catch (Exception e) {
-            System.out.println("[ERROR] " + e.getMessage());
-            response.put("steps", Collections.emptyList());
-            response.put("message", e.getMessage());
-        }
-        return response;
-    }
 }

@@ -132,27 +132,6 @@ class ScheduleRepository {
         }
     }
 
-    // SC-002: 과업 단계 조회
-    fun getTaskSteps(taskId: Int, onResult: (ApiResult<List<String>>) -> Unit) {
-        ApiClient.get("/tasks/$taskId/steps") { result ->
-            when (result) {
-                is ApiResult.Success -> {
-                    try {
-                        val arr = JSONObject(result.data).getJSONArray("steps")
-                        val list = mutableListOf<String>()
-                        for (i in 0 until arr.length()) {
-                            list.add(arr.getString(i))
-                        }
-                        onResult(ApiResult.Success(list))
-                    } catch (e: Exception) {
-                        onResult(ApiResult.Error("단계 파싱 실패: ${e.message}"))
-                    }
-                }
-                is ApiResult.Error -> onResult(result)
-            }
-        }
-    }
-
     // SM-002: 일정 시간 수정
     fun updateScheduleTime(scheduleId: Int, date: String, time: String, onResult: (ApiResult<Boolean>) -> Unit) {
         val scheduledAt = "${date}T${time}:00"
@@ -173,12 +152,49 @@ class ScheduleRepository {
         }
     }
 
+    // AI 맞춤 단계 생성
+    fun generateSteps(
+        taskId: Int,
+        location: String,
+        note: String,
+        onResult: (ApiResult<List<String>>) -> Unit
+    ) {
+        val body = JSONObject().apply {
+            put("guardianId", guardianId)
+            put("idx", userIdx)
+            put("taskId", taskId)
+            put("location", if (location.isNotEmpty() && location != "선택 안 함") location else "")
+            put("scheduleNote", note)
+        }.toString()
+
+        ApiClient.post("/v1/guardian/schedules/generate-steps", body) { result ->
+            when (result) {
+                is ApiResult.Success -> {
+                    try {
+                        val json = JSONObject(result.data)
+                        if (json.optString("status") != "SUCCESS") {
+                            onResult(ApiResult.Error(json.optString("message", "단계 생성 실패")))
+                            return@post
+                        }
+                        val arr = json.getJSONArray("steps")
+                        val list = (0 until arr.length()).map { arr.getString(it) }
+                        onResult(ApiResult.Success(list))
+                    } catch (e: Exception) {
+                        onResult(ApiResult.Error("단계 파싱 실패: ${e.message}"))
+                    }
+                }
+                is ApiResult.Error -> onResult(result)
+            }
+        }
+    }
+
     fun addSchedule(
         taskId: Int,
         date: String,
         time: String,
         location: String = "",
         specialNote: String = "",
+        customSteps: List<String> = emptyList(),
         onResult: (ApiResult<Unit>) -> Unit
     ) {
         val scheduledAt = "${date}T${time}:00"
@@ -189,6 +205,9 @@ class ScheduleRepository {
             put("scheduledAt", scheduledAt)
             put("location", if (location.isNotEmpty() && location != "선택 안 함") location else "")
             put("specialNote", specialNote)
+            if (customSteps.isNotEmpty()) {
+                put("customSteps", org.json.JSONArray(customSteps))
+            }
         }.toString()
 
         ApiClient.post("/v1/guardian/schedules", body) { result ->

@@ -14,6 +14,7 @@ public class ScheduleVO {
     private LocalDateTime successAt;
     private String location;    // SC-004: 장소 (세탁실, 부엌, 거실, 화장실, 방, 기타)
     private String specialNote; // SC-005: 일정 특이사항
+    private String customSteps; // AI 생성 맞춤 단계 (JSON 배열 문자열, nullable)
 
     private int questionCount;
     private LocalDateTime lastQuestionAt;
@@ -51,6 +52,9 @@ public class ScheduleVO {
 
     public String getSpecialNote() { return specialNote; }
     public void setSpecialNote(String specialNote) { this.specialNote = specialNote; }
+
+    public String getCustomSteps() { return customSteps; }
+    public void setCustomSteps(String customSteps) { this.customSteps = customSteps; }
 
     public int getQuestionCount() { return questionCount; }
     public void setQuestionCount(int questionCount) { this.questionCount = questionCount; }

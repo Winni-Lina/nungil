@@ -28,6 +28,7 @@ class ScheduleAddActivity : AppCompatActivity() {
 
     private val repository = ScheduleRepository()
     private val taskList   = mutableListOf<Task>()
+    private val stepEditTexts = mutableListOf<EditText>()
 
     private var selectedDate   = ""
     private var selectedHour   = 9
@@ -39,7 +40,6 @@ class ScheduleAddActivity : AppCompatActivity() {
     private lateinit var spinnerTask: Spinner
     private lateinit var etLocation: TextInputEditText
     private lateinit var etNote: TextInputEditText
-    private lateinit var tvAnalyzeResult: TextView
     private lateinit var pbStepsLoading: ProgressBar
     private lateinit var tvStepTimeout: TextView
     private lateinit var llSteps: LinearLayout
@@ -67,7 +67,6 @@ class ScheduleAddActivity : AppCompatActivity() {
         spinnerTask      = findViewById(R.id.spinnerTask)
         etLocation       = findViewById(R.id.etLocation)
         etNote           = findViewById(R.id.etNote)
-        tvAnalyzeResult  = findViewById(R.id.tvAnalyzeResult)
         pbStepsLoading   = findViewById(R.id.pbStepsLoading)
         tvStepTimeout    = findViewById(R.id.tvStepTimeout)
         llSteps          = findViewById(R.id.llSteps)
@@ -151,7 +150,12 @@ class ScheduleAddActivity : AppCompatActivity() {
                     spinnerTask.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                         override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
                             selectedTaskId = taskList[pos].taskId
-                            loadTaskSteps(selectedTaskId)
+                            // 과업 변경 시 기존 생성 단계 초기화
+                            stepEditTexts.clear()
+                            llSteps.removeAllViews()
+                            llSteps.visibility = View.GONE
+                            tvStepTimeout.visibility = View.GONE
+                            showGenerateButton()
                         }
                         override fun onNothingSelected(p: AdapterView<*>?) {}
                     }
@@ -163,39 +167,121 @@ class ScheduleAddActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadTaskSteps(taskId: Int) {
-        llSteps.visibility        = View.GONE
+    /** llSteps 영역에 "AI 단계 생성" 버튼 표시 */
+    private fun showGenerateButton() {
         llSteps.removeAllViews()
-        tvStepTimeout.visibility  = View.GONE
+        llSteps.visibility = View.VISIBLE
+        llSteps.addView(com.google.android.material.button.MaterialButton(this).apply {
+            text = "🤖 AI 맞춤 단계 만들기"
+            setOnClickListener { generateAiSteps() }
+        })
+    }
+
+    /** AI에게 맞춤 단계 생성 요청 */
+    private fun generateAiSteps() {
+        if (selectedTaskId == -1) {
+            Toast.makeText(this, "먼저 활동을 선택해주세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val location = etLocation.text?.toString()?.trim() ?: ""
+        val note     = etNote.text?.toString()?.trim() ?: ""
+
+        llSteps.removeAllViews()
+        llSteps.visibility       = View.VISIBLE
+        tvStepTimeout.visibility = View.GONE
         pbStepsLoading.visibility = View.VISIBLE
+        llSteps.addView(TextView(this).apply {
+            text = "AI가 맞춤 단계를 만들고 있어요..."
+            textSize = 13f
+            setTextColor(0xFF444444.toInt())
+            setPadding(0, 8, 0, 8)
+        })
 
         handler.removeCallbacks(timeoutRunnable)
-        handler.postDelayed(timeoutRunnable, 10_000)
+        handler.postDelayed(timeoutRunnable, 30_000)
 
-        repository.getTaskSteps(taskId) { result ->
+        repository.generateSteps(selectedTaskId, location, note) { result ->
             handler.removeCallbacks(timeoutRunnable)
-            runOnUiThread { onTaskStepsLoaded(result) }
-        }
-    }
-
-    private fun onTaskStepsLoaded(result: ApiResult<List<String>>) {
-        pbStepsLoading.visibility = View.GONE
-        when (result) {
-            is ApiResult.Success -> {
-                if (result.data.isEmpty()) return
-                llSteps.visibility = View.VISIBLE
-                result.data.forEachIndexed { i, step ->
-                    llSteps.addView(TextView(this).apply {
-                        text     = "${i + 1}. $step"
-                        textSize = 12f
-                        setTextColor(0xFF444444.toInt())
-                        setPadding(0, 6, 0, 6)
-                    })
+            runOnUiThread {
+                pbStepsLoading.visibility = View.GONE
+                when (result) {
+                    is ApiResult.Success -> renderEditableSteps(result.data)
+                    is ApiResult.Error   -> {
+                        Toast.makeText(this, "단계 생성 실패: ${result.message}", Toast.LENGTH_SHORT).show()
+                        // 실패해도 직접 입력할 수 있게 빈 단계 1개 제공
+                        renderEditableSteps(listOf(""))
+                    }
                 }
             }
-            is ApiResult.Error -> { /* 단계 없어도 등록 가능 */ }
         }
     }
+
+    /** 생성된 단계를 편집 가능한 EditText 리스트로 표시 */
+    private fun renderEditableSteps(steps: List<String>) {
+        stepEditTexts.clear()
+        llSteps.removeAllViews()
+        llSteps.visibility = View.VISIBLE
+
+        llSteps.addView(TextView(this).apply {
+            text = "✏️ 단계를 확인하고 수정하세요"
+            textSize = 13f
+            setTextColor(0xFF1A73E8.toInt())
+            setPadding(0, 0, 0, 8)
+        })
+
+        steps.forEach { addStepRow(it) }
+
+        // 단계 추가 버튼 (이후 새 행은 이 버튼 앞에 삽입됨)
+        llSteps.addView(com.google.android.material.button.MaterialButton(this).apply {
+            text = "+ 단계 추가"
+            setOnClickListener { addStepRow("") }
+        })
+
+        // 다시 생성 버튼
+        llSteps.addView(com.google.android.material.button.MaterialButton(this).apply {
+            text = "🔄 다시 생성"
+            setOnClickListener { generateAiSteps() }
+        })
+    }
+
+    /** 단계 하나에 대한 행(EditText+삭제버튼) 추가. 액션 버튼 앞에 삽입한다. */
+    private fun addStepRow(initial: String) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, 4, 0, 4)
+        }
+        val et = EditText(this).apply {
+            setText(initial)
+            textSize = 13f
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val btnDelete = ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_menu_delete)
+            background = null
+            setOnClickListener {
+                stepEditTexts.remove(et)
+                llSteps.removeView(row)
+            }
+        }
+        row.addView(et)
+        row.addView(btnDelete)
+        stepEditTexts.add(et)
+
+        // 액션 버튼(+단계 추가, 다시 생성)이 있으면 그 앞에, 없으면 맨 끝에 삽입
+        var insertIndex = llSteps.childCount
+        for (i in 0 until llSteps.childCount) {
+            if (llSteps.getChildAt(i) is com.google.android.material.button.MaterialButton) {
+                insertIndex = i
+                break
+            }
+        }
+        llSteps.addView(row, insertIndex)
+    }
+
+    /** 편집된 단계 텍스트 수집 (빈 항목 제외) */
+    private fun collectSteps(): List<String> =
+        stepEditTexts.map { it.text.toString().trim() }.filter { it.isNotEmpty() }
 
     private fun setupSaveButton(btnSave: com.google.android.material.button.MaterialButton) {
         btnSave.setOnClickListener {
@@ -208,13 +294,15 @@ class ScheduleAddActivity : AppCompatActivity() {
             val note      = etNote.text?.toString()?.trim() ?: ""
             val taskName  = taskList.firstOrNull { it.taskId == selectedTaskId }?.taskName ?: "과업"
             val locationLabel = if (location.isEmpty()) "장소 미지정" else location
+            val steps     = collectSteps()
+            val stepInfo  = if (steps.isEmpty()) "단계 없음" else "${steps.size}단계"
 
             AlertDialog.Builder(this)
                 .setTitle("일정 저장 확인")
-                .setMessage("📋 $taskName\n🕐 $selectedDate $timeStr\n📍 $locationLabel\n\n이 일정을 저장하고 알림을 설정할까요?")
+                .setMessage("📋 $taskName\n🕐 $selectedDate $timeStr\n📍 $locationLabel\n📝 $stepInfo\n\n이 일정을 저장하고 알림을 설정할까요?")
                 .setPositiveButton("확인") { _, _ ->
                     btnSave.isEnabled = false
-                    repository.addSchedule(selectedTaskId, selectedDate, timeStr, location, note) { result ->
+                    repository.addSchedule(selectedTaskId, selectedDate, timeStr, location, note, steps) { result ->
                         runOnUiThread {
                             btnSave.isEnabled = true
                             when (result) {

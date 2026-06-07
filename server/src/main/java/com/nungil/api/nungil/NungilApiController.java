@@ -137,6 +137,7 @@ public class NungilApiController {
                 item.put("taskId", s.getTaskId());
                 item.put("taskName", s.getTaskName());
                 item.put("taskProcess", s.getTaskProcess());
+                item.put("customSteps", s.getCustomSteps());
                 item.put("scheduledAt", s.getScheduledAt());
                 item.put("location", s.getLocation());
                 item.put("specialNote", s.getSpecialNote());

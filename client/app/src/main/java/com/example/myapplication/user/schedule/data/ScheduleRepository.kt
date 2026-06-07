@@ -90,7 +90,7 @@ object ScheduleRepository {
                 ScheduleItem(
                     scheduleId        = obj.getLong("scheduleId").toInt(),
                     title             = obj.optString("taskName", ""),
-                    steps             = parseTaskProcess(obj),
+                    steps             = parseSteps(obj),
                     triggerTimeMillis = DateParseUtil.parseScheduledAtMillis(obj),
                     location          = obj.optString("location", ""),
                     scheduleNote      = obj.optString("specialNote", "")
@@ -148,16 +148,32 @@ object ScheduleRepository {
 
     // ── 파싱 유틸 ────────────────────────────────────────────────────────────
 
-    // taskProcess: 이미 파싱된 배열 or DB JSON 문자열 둘 다 처리
-    private fun parseTaskProcess(obj: JSONObject): List<String> = try {
-        val arr = obj.optJSONArray("taskProcess")
-        if (arr != null) {
-            (0 until arr.length()).map { arr.getString(it) }
-        } else {
-            val parsed = JSONArray(obj.optString("taskProcess", "[]"))
-            (0 until parsed.length()).map { parsed.getString(it) }
+    // 단계 우선순위: customSteps(AI 맞춤) → taskProcess(기본) fallback
+    private fun parseSteps(obj: JSONObject): List<String> {
+        val custom = parseStepField(obj, "customSteps")
+        if (custom.isNotEmpty()) return custom
+        return parseStepField(obj, "taskProcess")
+    }
+
+    // 필드가 JSON 배열 / JSON 문자열 / 줄바꿈 텍스트 어느 형태든 파싱
+    private fun parseStepField(obj: JSONObject, field: String): List<String> {
+        // 1) 이미 배열로 파싱된 경우
+        obj.optJSONArray(field)?.let { arr ->
+            return (0 until arr.length()).map { arr.getString(it) }
         }
-    } catch (e: Exception) { emptyList() }
+        val raw = obj.optString(field, "").trim()
+        if (raw.isEmpty() || raw == "null") return emptyList()
+        // 2) JSON 배열 문자열
+        try {
+            val parsed = JSONArray(raw)
+            val list = (0 until parsed.length()).map { parsed.getString(it) }
+            if (list.isNotEmpty()) return list
+        } catch (_: Exception) { }
+        // 3) 줄바꿈 구분 텍스트
+        return raw.split("\n")
+            .map { it.trim().replace(Regex("^\\d+[.)]\\s*"), "") }
+            .filter { it.isNotEmpty() }
+    }
 
     // scheduledAt 파싱은 DateParseUtil.parseScheduledAtMillis() 참조
 

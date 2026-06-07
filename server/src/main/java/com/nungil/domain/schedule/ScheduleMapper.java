@@ -38,6 +38,9 @@ public interface ScheduleMapper {
 
     void incrementQuestionCount(@Param("scheduleId") Long scheduleId);
 
+    void updateCustomSteps(@Param("scheduleId") Long scheduleId,
+                           @Param("customSteps") String customSteps);
+
     List<Map<String, Object>> findRecentRepeatUsers();
 
     List<Map<String, Object>> findTaskTrends(@Param("id") String id, @Param("idx") int idx,
