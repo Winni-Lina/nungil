@@ -31,7 +31,7 @@ class UserQrActivity : AppCompatActivity() {
                 ScanOptions().apply {
                     setPrompt("보호자 기기의 QR코드를 스캔해주세요")
                     setBeepEnabled(false)
-                    setOrientationLocked(false)
+                    setOrientationLocked(true)
                 }
             )
         }

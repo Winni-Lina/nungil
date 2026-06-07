@@ -33,38 +33,6 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- 사용자 ID -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="56dp"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:paddingHorizontal="16dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="사용자 ID"
-                        android:textSize="15sp"
-                        android:textColor="@color/textPrimary"/>
-
-                    <TextView
-                        android:id="@+id/tvUserId"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textSize="14sp"
-                        android:textColor="@color/textSecondary"/>
-
-                </LinearLayout>
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="#F0F0F0"
-                    android:layout_marginStart="16dp"
-                    android:layout_marginEnd="16dp"/>
-
                 <!-- 로그아웃 -->
                 <LinearLayout
                     android:id="@+id/layoutLogout"

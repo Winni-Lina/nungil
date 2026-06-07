@@ -49,16 +49,45 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <EditText
-                android:id="@+id/etId"
+            <!-- 아이디 + 중복확인 -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="52dp"
-                android:hint="아이디 (영문/숫자)"
-                android:textSize="15sp"
-                android:background="@drawable/bg_input_dark"
-                android:paddingStart="16dp"
-                android:inputType="text"
-                android:layout_marginBottom="12dp"/>
+                android:orientation="horizontal"
+                android:layout_marginBottom="12dp">
+
+                <EditText
+                    android:id="@+id/etId"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:hint="아이디 (영문/숫자)"
+                    android:textSize="15sp"
+                    android:textColor="#1A1A1A"
+                    android:textColorHint="#AAAAAA"
+                    android:background="@drawable/bg_input_dark"
+                    android:paddingStart="16dp"
+                    android:inputType="text"/>
+
+                <Button
+                    android:id="@+id/btnCheckId"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="8dp"
+                    android:text="중복확인"
+                    android:textSize="13sp"
+                    android:paddingHorizontal="12dp"/>
+
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvIdCheckResult"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:layout_marginTop="-8dp"
+                android:layout_marginBottom="8dp"
+                android:visibility="gone"/>
 
             <EditText
                 android:id="@+id/etPw"
@@ -66,6 +95,8 @@
                 android:layout_height="52dp"
                 android:hint="비밀번호"
                 android:textSize="15sp"
+                android:textColor="#1A1A1A"
+                android:textColorHint="#AAAAAA"
                 android:background="@drawable/bg_input_dark"
                 android:paddingStart="16dp"
                 android:inputType="textPassword"
@@ -77,6 +108,8 @@
                 android:layout_height="52dp"
                 android:hint="비밀번호 확인"
                 android:textSize="15sp"
+                android:textColor="#1A1A1A"
+                android:textColorHint="#AAAAAA"
                 android:background="@drawable/bg_input_dark"
                 android:paddingStart="16dp"
                 android:inputType="textPassword"
@@ -88,6 +121,8 @@
                 android:layout_height="52dp"
                 android:hint="이름"
                 android:textSize="15sp"
+                android:textColor="#1A1A1A"
+                android:textColorHint="#AAAAAA"
                 android:background="@drawable/bg_input_dark"
                 android:paddingStart="16dp"
                 android:inputType="textPersonName"
@@ -99,6 +134,8 @@
                 android:layout_height="52dp"
                 android:hint="이메일 (비밀번호 찾기에 사용)"
                 android:textSize="15sp"
+                android:textColor="#1A1A1A"
+                android:textColorHint="#AAAAAA"
                 android:background="@drawable/bg_input_dark"
                 android:paddingStart="16dp"
                 android:inputType="textEmailAddress"
@@ -110,6 +147,8 @@
                 android:layout_height="52dp"
                 android:hint="전화번호 (선택)"
                 android:textSize="15sp"
+                android:textColor="#1A1A1A"
+                android:textColorHint="#AAAAAA"
                 android:background="@drawable/bg_input_dark"
                 android:paddingStart="16dp"
                 android:inputType="phone"

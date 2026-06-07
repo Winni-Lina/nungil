@@ -5,6 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#F0F2F5"
+    android:fitsSystemWindows="true"
     android:padding="32dp">
 
     <ImageView

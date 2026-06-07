@@ -286,36 +286,65 @@ class SettingsFragment : Fragment() {
             hint = "전화번호 (예: 010-1234-5678)"
             inputType = android.text.InputType.TYPE_CLASS_PHONE
         }
+        val etSpecialNote = EditText(requireContext()).apply {
+            hint = "특이사항 (예: 큰 소리 무서워함)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 2
+        }
+        val tvLabel = android.widget.TextView(requireContext()).apply {
+            text = "특이사항"
+            textSize = 12f
+            setTextColor(android.graphics.Color.parseColor("#666666"))
+            setPadding(0, 16, 0, 4)
+        }
         container.addView(etName)
         container.addView(etPhone)
+        container.addView(tvLabel)
+        container.addView(etSpecialNote)
 
         AlertDialog.Builder(requireContext())
             .setTitle("피보호자 정보 등록")
             .setView(container)
             .setPositiveButton("저장") { _, _ ->
-                val name  = etName.text.toString().trim()
-                val phone = etPhone.text.toString().trim()
+                val name       = etName.text.toString().trim()
+                val phone      = etPhone.text.toString().trim()
+                val specialNote = etSpecialNote.text.toString().trim()
                 if (name.isEmpty()) {
                     Toast.makeText(context, "이름을 입력해주세요.", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                registerUserInfo(name, phone)
+                registerUserInfo(name, phone, specialNote)
             }
             .setNegativeButton("취소", null)
             .show()
     }
 
-    private fun registerUserInfo(name: String, phone: String) {
-        val path = "/v1/guardian/settings/user/${Session.guardianId}/${Session.userIdx}/userinfo"
-        val body = JSONObject().apply {
+    private fun registerUserInfo(name: String, phone: String, specialNote: String = "") {
+        // 이름/전화번호 저장
+        val pathInfo = "/v1/guardian/settings/user/${Session.guardianId}/${Session.userIdx}/userinfo"
+        ApiClient.post(pathInfo, JSONObject().apply {
             put("userName", name)
             put("userPhone", phone)
-        }.toString()
-        ApiClient.post(path, body) { result ->
+        }.toString()) { result ->
             activity?.runOnUiThread {
                 when (result) {
                     is ApiResult.Success -> Toast.makeText(context, "피보호자 정보가 저장됐어요.", Toast.LENGTH_SHORT).show()
-                    is ApiResult.Error   -> Toast.makeText(context, "저장 실패: ${result.message}", Toast.LENGTH_SHORT).show()
+                    is ApiResult.Error   -> Toast.makeText(context, "정보 저장 실패: ${result.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        // 특이사항 저장 (입력된 경우만)
+        if (specialNote.isNotEmpty()) {
+            val pathNote = "/v1/guardian/settings/user/${Session.guardianId}/${Session.userIdx}/profile"
+            ApiClient.post(pathNote, JSONObject().apply {
+                put("specialNote", specialNote)
+            }.toString()) { result ->
+                activity?.runOnUiThread {
+                    when (result) {
+                        is ApiResult.Success -> Toast.makeText(context, "특이사항이 저장됐어요.", Toast.LENGTH_SHORT).show()
+                        is ApiResult.Error   -> Toast.makeText(context, "특이사항 저장 실패", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }

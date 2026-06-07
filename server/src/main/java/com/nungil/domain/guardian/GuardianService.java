@@ -23,8 +23,17 @@ public class GuardianService {
         GuardianVO existing = guardianMapper.findById(guardian.getId());
         System.out.println("[DB] GUARDIAN 조회 (id=" + guardian.getId() + ") → " + (existing != null ? "이미 존재" : "없음"));
         if (existing != null) throw new IllegalArgumentException("ID_EXISTS");
+
+        GuardianVO byEmail = guardianMapper.findByEmail(guardian.getEmail());
+        if (byEmail != null) throw new IllegalArgumentException("EMAIL_EXISTS");
+
         guardianMapper.insert(guardian);
         System.out.println("[DB] GUARDIAN INSERT 완료 (id=" + guardian.getId() + ")");
+    }
+
+    /** 아이디 중복 여부 확인 */
+    public boolean isIdAvailable(String id) {
+        return guardianMapper.findById(id) == null;
     }
 
     public GuardianVO login(String id, String pw) {

@@ -17,6 +17,22 @@ public class GuardianAuthController {
         this.guardianService = guardianService;
     }
 
+    /** 아이디 중복 확인 GET /api/v1/guardian/auth/check-id?id=xxx */
+    @GetMapping("/check-id")
+    public Map<String, Object> checkId(@RequestParam("id") String id) {
+        System.out.println("[API] GET /api/v1/guardian/auth/check-id?id=" + id);
+        Map<String, Object> response = new HashMap<>();
+        try {
+            boolean available = guardianService.isIdAvailable(id);
+            response.put("available", available);
+            response.put("message", available ? "사용 가능한 아이디입니다" : "이미 사용 중인 아이디입니다");
+        } catch (Exception e) {
+            response.put("available", false);
+            response.put("message", e.getMessage());
+        }
+        return response;
+    }
+
     /** 회원가입 POST /api/v1/guardian/auth/signup */
     @PostMapping("/signup")
     public Map<String, Object> signup(@RequestBody Map<String, Object> body) {
@@ -43,7 +59,8 @@ public class GuardianAuthController {
             System.out.println("[결과] 회원가입 실패 - " + e.getMessage());
             response.put("status", "ERROR");
             response.put("errorCode", e.getMessage());
-            response.put("message", "이미 사용 중인 아이디입니다");
+            response.put("message", "EMAIL_EXISTS".equals(e.getMessage())
+                    ? "이미 사용 중인 이메일입니다" : "이미 사용 중인 아이디입니다");
         } catch (Exception e) {
             System.out.println("[ERROR] " + e.getMessage());
             response.put("status", "ERROR");

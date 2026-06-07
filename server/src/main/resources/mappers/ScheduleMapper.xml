@@ -53,10 +53,10 @@
         WHERE schedule_id = #{scheduleId}
     </update>
 
-    <!-- SC-007: 드래그로 시간 변경 -->
+    <!-- SC-007: 드래그로 시간 변경 (completed 제외한 모든 상태 허용) -->
     <update id="updateScheduledAt">
         UPDATE SCHEDULE SET scheduled_at = #{scheduledAt}
-        WHERE schedule_id = #{scheduleId} AND status = 'pending'
+        WHERE schedule_id = #{scheduleId} AND status != 'completed'
     </update>
 
     <delete id="deleteById">

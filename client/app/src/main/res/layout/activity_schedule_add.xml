@@ -246,40 +246,22 @@
                         android:textColor="@color/textHint"
                         android:layout_marginBottom="8dp"/>
 
-                    <LinearLayout
+                    <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal">
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                        android:hint="예: 지하철 대신 버스 이용, 우산 필요, 지갑 챙기기">
 
-                        <com.google.android.material.textfield.TextInputLayout
-                            android:layout_width="0dp"
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etNote"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-                            android:hint="예: 지하철 대신 버스 이용, 우산 필요, 지갑 챙기기">
+                            android:inputType="textMultiLine"
+                            android:minLines="2"
+                            android:maxLines="4"
+                            android:gravity="top"/>
 
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/etNote"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="textMultiLine"
-                                android:minLines="2"
-                                android:maxLines="4"
-                                android:gravity="top"/>
-
-                        </com.google.android.material.textfield.TextInputLayout>
-
-                        <ImageButton
-                            android:id="@+id/btnRecord"
-                            android:layout_width="52dp"
-                            android:layout_height="52dp"
-                            android:layout_marginStart="8dp"
-                            android:layout_gravity="center_vertical"
-                            android:src="@android:drawable/ic_btn_speak_now"
-                            android:background="@drawable/bg_input_dark"
-                            android:contentDescription="음성 입력"/>
-
-                    </LinearLayout>
+                    </com.google.android.material.textfield.TextInputLayout>
 
                     <TextView
                         android:id="@+id/tvAnalyzeResult"

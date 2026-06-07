@@ -1,10 +1,7 @@
 package com.example.myapplication.guardian.schedule.ui
 
-import android.Manifest
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
-import android.content.pm.PackageManager
-import android.media.MediaRecorder
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -12,16 +9,11 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.example.myapplication.R
-import com.example.myapplication.core.network.ApiClient
 import com.example.myapplication.core.network.ApiResult
 import com.example.myapplication.guardian.schedule.data.ScheduleRepository
 import com.example.myapplication.model.Task
 import com.google.android.material.textfield.TextInputEditText
-import org.json.JSONObject
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -37,7 +29,6 @@ class ScheduleAddActivity : AppCompatActivity() {
     private val repository = ScheduleRepository()
     private val taskList   = mutableListOf<Task>()
 
-    // ScheduleFragment에서 넘어온 날짜/시간
     private var selectedDate   = ""
     private var selectedHour   = 9
     private var selectedMinute = 0
@@ -48,15 +39,10 @@ class ScheduleAddActivity : AppCompatActivity() {
     private lateinit var spinnerTask: Spinner
     private lateinit var etLocation: TextInputEditText
     private lateinit var etNote: TextInputEditText
-    private lateinit var btnRecord: ImageButton
     private lateinit var tvAnalyzeResult: TextView
     private lateinit var pbStepsLoading: ProgressBar
     private lateinit var tvStepTimeout: TextView
     private lateinit var llSteps: LinearLayout
-
-    private var mediaRecorder: MediaRecorder? = null
-    private var recordingFile: File? = null
-    private var isRecording = false
 
     private val handler = Handler(Looper.getMainLooper())
     private val timeoutRunnable = Runnable {
@@ -71,7 +57,6 @@ class ScheduleAddActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_schedule_add)
 
-        // Intent extras 수신
         val cal = Calendar.getInstance()
         selectedDate   = intent.getStringExtra(EXTRA_DATE)   ?: filterDateFmt.format(cal.time)
         selectedHour   = intent.getIntExtra(EXTRA_HOUR,   cal.get(Calendar.HOUR_OF_DAY))
@@ -82,31 +67,24 @@ class ScheduleAddActivity : AppCompatActivity() {
         spinnerTask      = findViewById(R.id.spinnerTask)
         etLocation       = findViewById(R.id.etLocation)
         etNote           = findViewById(R.id.etNote)
-        btnRecord        = findViewById(R.id.btnRecord)
         tvAnalyzeResult  = findViewById(R.id.tvAnalyzeResult)
         pbStepsLoading   = findViewById(R.id.pbStepsLoading)
         tvStepTimeout    = findViewById(R.id.tvStepTimeout)
         llSteps          = findViewById(R.id.llSteps)
 
-        // 뒤로 버튼
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
 
-        // 날짜/시간 표시
         refreshDateTimeDisplay()
 
-        // 날짜 변경 버튼
         findViewById<com.google.android.material.button.MaterialButton>(R.id.btnChangeDate)
             .setOnClickListener { showDatePicker() }
 
-        // SC-003: 시간 변경 (tvPrefilledTime 클릭)
         tvPrefilledTime.setOnClickListener { showTimePicker() }
 
-        // 저장 버튼
         val btnSave = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSave)
 
         setupTaskSpinner()
         setupLocationPicker()
-        setupRecordButton()
         setupSaveButton(btnSave)
     }
 
@@ -128,7 +106,6 @@ class ScheduleAddActivity : AppCompatActivity() {
         }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
     }
 
-    // SC-003: 시간 선택
     private fun showTimePicker() {
         TimePickerDialog(this, { _, hour, minute ->
             selectedHour   = hour
@@ -137,7 +114,6 @@ class ScheduleAddActivity : AppCompatActivity() {
         }, selectedHour, selectedMinute, true).show()
     }
 
-    // SC-004: 장소 선택 드롭다운
     private val locationOptions = arrayOf("세탁실", "부엌", "거실", "화장실", "방", "기타")
 
     private fun setupLocationPicker() {
@@ -162,7 +138,6 @@ class ScheduleAddActivity : AppCompatActivity() {
             .show()
     }
 
-    // SC-002: 과업 스피너 + 단계 조회
     private fun setupTaskSpinner() {
         repository.getWhitelistTasks { result ->
             when (result) {
@@ -222,63 +197,6 @@ class ScheduleAddActivity : AppCompatActivity() {
         }
     }
 
-    // SC-005: 녹음 → 분석
-    private fun setupRecordButton() {
-        btnRecord.setOnClickListener {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 100)
-                return@setOnClickListener
-            }
-            if (isRecording) stopRecordingAndAnalyze() else startRecording()
-        }
-    }
-
-    private fun startRecording() {
-        val file = File(cacheDir, "note_${System.currentTimeMillis()}.m4a")
-        recordingFile = file
-        mediaRecorder = MediaRecorder().apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            setOutputFile(file.absolutePath)  // 로컬 변수 사용 — !! 불필요
-            prepare(); start()
-        }
-        isRecording = true
-        btnRecord.setImageResource(android.R.drawable.ic_media_pause)
-        Toast.makeText(this, "녹음 중... 다시 누르면 완료", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun stopRecordingAndAnalyze() {
-        mediaRecorder?.apply { stop(); release() }
-        mediaRecorder = null; isRecording = false
-        btnRecord.setImageResource(android.R.drawable.ic_btn_speak_now)
-
-        val file = recordingFile ?: return
-        tvAnalyzeResult.text      = "분석 중..."
-        tvAnalyzeResult.visibility = View.VISIBLE
-
-        ApiClient.postAudioFile("/v1/nungil/analyze", file) { result ->
-            runOnUiThread { onAnalyzeResult(result) }
-        }
-    }
-
-    private fun onAnalyzeResult(result: ApiResult<String>) {
-        when (result) {
-            is ApiResult.Success -> {
-                try {
-                    val json = JSONObject(result.data)
-                    val text = json.optString("result", json.optString("text", result.data))
-                    tvAnalyzeResult.text = "📝 $text"
-                    etNote.setText(text)
-                } catch (_: Exception) {
-                    tvAnalyzeResult.text = result.data
-                }
-            }
-            is ApiResult.Error -> tvAnalyzeResult.text = "분석 실패: ${result.message}"
-        }
-    }
-
     private fun setupSaveButton(btnSave: com.google.android.material.button.MaterialButton) {
         btnSave.setOnClickListener {
             if (selectedTaskId == -1) {
@@ -291,7 +209,6 @@ class ScheduleAddActivity : AppCompatActivity() {
             val taskName  = taskList.firstOrNull { it.taskId == selectedTaskId }?.taskName ?: "과업"
             val locationLabel = if (location.isEmpty()) "장소 미지정" else location
 
-            // SC-008: 저장 확인 다이얼로그
             AlertDialog.Builder(this)
                 .setTitle("일정 저장 확인")
                 .setMessage("📋 $taskName\n🕐 $selectedDate $timeStr\n📍 $locationLabel\n\n이 일정을 저장하고 알림을 설정할까요?")
@@ -317,7 +234,6 @@ class ScheduleAddActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
-        mediaRecorder?.release()
         super.onDestroy()
     }
 }
