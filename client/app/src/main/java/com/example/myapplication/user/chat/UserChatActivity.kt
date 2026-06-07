@@ -278,22 +278,18 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
             voskManager.stopListening()
         }
 
-        val finalText = if (text != null && !isScheduleMode) "${buildUserContext()}\n\n사용자 질문: $text" else text
+        // 히스토리에 현재 질문 추가 (순수 대화 내용만)
         if (text != null) conversationHistory.add(UserChatLog("user", text))
 
         val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
         val textMt = "text/plain; charset=utf-8".toMediaTypeOrNull()
 
-        // 사용자 컨텍스트를 historyJson 앞에 시스템 메시지로 항상 삽입 (음성/텍스트 공통)
-        val contextLog = buildUserContext()
-        val historyWithContext = buildString {
-            append("[시스템 정보]\n$contextLog\n\n")
-            append(gson.toJson(conversationHistory))
-        }
-
-        builder.addFormDataPart("userId", null, USER_ID.toRequestBody(textMt))
-        builder.addFormDataPart("historyJson", null, historyWithContext.toRequestBody(textMt))
-        finalText?.let { builder.addFormDataPart("textPrompt", null, it.toRequestBody(textMt)) }
+        // historyJson: 순수 대화 히스토리 JSON만 전송 (시스템 정보 없이)
+        builder.addFormDataPart("userId",      null, USER_ID.toRequestBody(textMt))
+        builder.addFormDataPart("historyJson", null, gson.toJson(conversationHistory).toRequestBody(textMt))
+        builder.addFormDataPart("userContext", null, buildUserContext().toRequestBody(textMt))
+        // textPrompt: 질문 텍스트만 전송 (컨텍스트 중복 없이)
+        text?.let { builder.addFormDataPart("textPrompt", null, it.toRequestBody(textMt)) }
 
         // mode 전송
         val mode = if (isScheduleMode) "schedule" else "chat"

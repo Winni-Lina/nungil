@@ -29,6 +29,7 @@ public class NungilAnalyzeController {
     public Map<String, Object> analyze(
             @RequestPart(value = "userId",        required = false) String id,
             @RequestPart(value = "historyJson",   required = false) String historyJson,
+            @RequestPart(value = "userContext",   required = false) String userContext,
             @RequestPart(value = "voiceFile",     required = false) MultipartFile voiceFile,
             @RequestPart(value = "imageFile",     required = false) MultipartFile imageFile,
             @RequestParam(value = "textPrompt",   required = false) String textPrompt,
@@ -50,7 +51,7 @@ public class NungilAnalyzeController {
             }
 
             Map<String, Object> result = orchestrator.execute(
-                    userId, historyJson, voiceFile, imageFile, textPrompt,
+                    userId, historyJson, userContext, voiceFile, imageFile, textPrompt,
                     mode, scheduleTitle, currentStep, stepIndex, totalSteps, specialNote, stepsJson);
 
             System.out.println("[결과] 분석 완료 userId=" + userId + ", mode=" + mode);
