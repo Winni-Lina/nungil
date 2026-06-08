@@ -18,6 +18,32 @@ import java.util.concurrent.TimeUnit
 class ScheduleManager(private val context: Context) {
 
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    private val alarmPrefs = context.getSharedPreferences("alarm_registry", Context.MODE_PRIVATE)
+
+    /** 현재 등록된 알람 scheduleId 목록을 저장 */
+    private fun saveRegisteredIds(ids: Set<String>) {
+        alarmPrefs.edit().putStringSet("registered_ids", ids).apply()
+    }
+
+    private fun loadRegisteredIds(): Set<String> =
+        alarmPrefs.getStringSet("registered_ids", emptySet()) ?: emptySet()
+
+    /** 특정 일정의 알람 취소 (삭제 시 호출) */
+    fun cancelAlarm(scheduleId: String) {
+        alarmManager.cancel(makePendingIntent(scheduleId, ""))
+        saveRegisteredIds(loadRegisteredIds().minus(scheduleId))
+        android.util.Log.d("AlarmDebug", "알람 취소: scheduleId=$scheduleId")
+    }
+
+    /** 모든 등록된 알람 취소 후 재등록 (동기화 시 내부 사용) */
+    private fun cancelStaleAlarms(newIds: Set<String>) {
+        loadRegisteredIds()
+            .filter { it !in newIds }
+            .forEach { id ->
+                alarmManager.cancel(makePendingIntent(id, ""))
+                android.util.Log.d("AlarmDebug", "오래된 알람 취소: scheduleId=$id")
+            }
+    }
 
     companion object {
         const val CHANNEL_ID = "schedule_channel"
@@ -47,17 +73,24 @@ class ScheduleManager(private val context: Context) {
 
     fun registerAlarms(schedules: List<ScheduleRepository.ScheduleItem>) {
         android.util.Log.d("AlarmDebug", "registerAlarms 호출 - 일정 ${schedules.size}개")
+
+        // 서버에서 내려온 목록에 없는 알람(삭제된 일정)은 취소
+        val newIds = schedules.map { it.scheduleId.toString() }.toSet()
+        cancelStaleAlarms(newIds)
+
         val now = System.currentTimeMillis()
+        val registeredIds = mutableSetOf<String>()
         schedules.forEach { item ->
             val diff = item.triggerTimeMillis - now
-            android.util.Log.d("AlarmDebug", "scheduleId=${item.scheduleId} title=${item.title} triggerTime=${item.triggerTimeMillis} diff=${diff}ms")
+            android.util.Log.d("AlarmDebug", "scheduleId=${item.scheduleId} title=${item.title} diff=${diff}ms")
             if (diff > 0) {
-                android.util.Log.d("AlarmDebug", "→ 알람 등록: ${item.title} (${diff / 1000}초 후)")
                 setAlarm(item.scheduleId.toString(), item.title, item.triggerTimeMillis)
+                registeredIds.add(item.scheduleId.toString())
             } else {
                 android.util.Log.d("AlarmDebug", "→ 이미 지난 시간, 스킵")
             }
         }
+        saveRegisteredIds(registeredIds)
     }
 
     private fun setAlarm(scheduleId: String, title: String, triggerTimeMillis: Long) {

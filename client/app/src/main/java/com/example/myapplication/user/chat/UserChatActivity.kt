@@ -149,7 +149,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
         val welcomeMsg = "안녕! 나는 똘똘이야. 뭐든 물어봐!"
         addMsg(welcomeMsg, UserChatMessage.TYPE_OTHER, false, null, mutableListOf("오늘 날씨 어때?", "넌 누구니?"))
-        conversationHistory.add(UserChatLog("AI", welcomeMsg))
+        conversationHistory.add(UserChatLog("model", welcomeMsg))
         mainHandler.postDelayed({ ttsManager.speak(welcomeMsg) }, 1000)
 
         loadUserDataFromDB()
@@ -203,6 +203,8 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     speechRecognizer?.cancel()
                     resetToIdleState()
                 }
+                // fallback 버튼 대기 중엔 마이크 탭 무시 (버튼만 사용해야 함)
+                awaitingFallbackButton -> { /* 버튼을 눌러줘! 대기 중 - 무시 */ }
                 else -> {
                     startRecordingFlow(manual = true)
                 }
@@ -350,8 +352,13 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     updateVoiceStatus(transcribed)
                 }
 
-                val answer = result.optString("answer", "")
-                conversationHistory.add(UserChatLog("AI", answer))
+                // answer 세척: 서버 1차 방어에 더해, 펜스/이중 JSON이 남아있을 경우 한 번 더 정리
+                var answer = result.optString("answer", "")
+                    .replace("```json", "").replace("```", "").trim()
+                if (answer.startsWith("{") && answer.contains("\"answer\"")) {
+                    try { answer = JSONObject(answer).optString("answer", answer).trim() } catch (_: Exception) {}
+                }
+                conversationHistory.add(UserChatLog("model", answer))
 
                 val suggestArray = result.optJSONArray("suggestedQuestions")
                 val suggests = mutableListOf<String?>()
@@ -359,10 +366,14 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     for (i in 0 until suggestArray.length()) suggests.add(suggestArray.getString(i))
                 }
 
-                // 단계 완료는 클라이언트 키워드/버튼으로만 결정 (stepComplete 의존 제거)
+                val stepComplete = result.optBoolean("stepComplete", false)
+
+                // 일정 모드: stepComplete=true일 때만 "다음 단계로" 버튼 표시
                 if (isScheduleMode) {
-                    val nextLabel = if (scheduleSteps.isNotEmpty() && currentStepIndex + 1 < scheduleSteps.size) "다음 단계로" else "완료"
-                    suggests.add(0, nextLabel)
+                    if (stepComplete) {
+                        val nextLabel = if (scheduleSteps.isNotEmpty() && currentStepIndex + 1 < scheduleSteps.size) "다음 단계로" else "완료"
+                        suggests.add(0, nextLabel)
+                    }
                 }
 
                 if (currentScheduleId > 0) ScheduleRepository.logQuestion(currentScheduleId.toLong())
@@ -404,8 +415,16 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     }
 
     private fun startSpeechRecognition(scheduleMode: Boolean = false) {
+        // destroy 후 바로 시작하면 ERROR_CLIENT(11) 발생 → 100ms 딜레이
         speechRecognizer?.destroy()
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        speechRecognizer = null
+        mainHandler.postDelayed({
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+            doStartListening(scheduleMode)
+        }, 100)
+    }
+
+    private fun doStartListening(scheduleMode: Boolean) {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
@@ -425,7 +444,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     sttFailCount++
                     updateVoiceStatus("다시 말해줄래요?")
                     if (scheduleMode) {
-                        if (sttFailCount >= 3) showScheduleFallbackButtons()
+                        if (sttFailCount >= 2) showScheduleFallbackButtons()
                         else mainHandler.postDelayed({ startAutoScheduleListening() }, 1500)
                     } else {
                         resetToIdleState()
@@ -435,12 +454,17 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
             override fun onError(error: Int) {
                 isRecording = false
                 Log.e("STT", "SpeechRecognizer 오류: $error")
+                // ERROR_RECOGNIZER_BUSY(7): 이전 세션 충돌 → 카운트 없이 재시도
+                if (error == 7) {
+                    mainHandler.postDelayed({ startAutoScheduleListening() }, 500)
+                    return
+                }
                 sttFailCount++
-                updateVoiceStatus("잘 못 들었어요")
                 if (scheduleMode) {
-                    if (sttFailCount >= 3) showScheduleFallbackButtons()
+                    if (sttFailCount >= 2) showScheduleFallbackButtons()
                     else mainHandler.postDelayed({ startAutoScheduleListening() }, 1500)
                 } else {
+                    updateVoiceStatus("잘 못 들었어요")
                     resetToIdleState()
                 }
             }
@@ -466,20 +490,27 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     }
 
     private fun handleScheduleVoiceResult(text: String) {
-        val completionKeywords = listOf("응", "어", "네", "했어", "다 했어", "완료", "끝", "됐어", "했어요", "다했어", "했습니다", "다 했어요")
-        val retryKeywords = listOf("아니", "안 했어", "못 했어", "안했어", "못했어", "아직")
+        val trimmed = text.trim()
+        // 짧은 단어는 정확히 일치해야 완료로 인정 (contains면 "모르겠어"가 "어"에 걸림)
+        val exactKeywords = setOf("응", "어", "네", "끝", "완료")
+        // 긴 표현은 포함 여부로 판단
+        val containsKeywords = listOf("했어", "다 했어", "됐어", "했어요", "다했어", "했습니다", "다 했어요", "끝났어", "끝냈어")
+        val retryKeywords = listOf("아니", "안 했어", "못 했어", "안했어", "못했어", "아직", "모르겠")
+
+        val isComplete = exactKeywords.contains(trimmed) || containsKeywords.any { trimmed.contains(it) }
+        val isRetry = retryKeywords.any { trimmed.contains(it) }
 
         when {
-            completionKeywords.any { text.contains(it) } -> {
+            isComplete -> {
                 mainHandler.postDelayed({ proceedToNextStep() }, 500)
             }
-            retryKeywords.any { text.contains(it) } -> {
-                // 안 했다 → 같은 단계 다시 안내
-                sendSchedulePromptToAI()
+            isRetry -> {
+                // 못 했다 / 모르겠다 → AI에게 전달해서 도움받기
+                uploadToServer(null, null, trimmed)
             }
             else -> {
-                // 질문이나 벗어난 말 → AI에게 전달(안내/답변만 받음). 완료는 클라이언트가 결정.
-                uploadToServer(null, null, text)
+                // 질문이나 관련 없는 말 → AI에게 전달(안내/답변만 받음)
+                uploadToServer(null, null, trimmed)
             }
         }
     }
@@ -559,14 +590,22 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private fun sendSchedulePromptToAI() {
         if (loadingBar.visibility == View.VISIBLE || isRecording) return
         voskManager.stopListening()
+        // 새 단계 시작 시 히스토리에서 이전 단계 대화 제거 (최근 2개만 유지)
+        if (currentStepIndex > 0 && conversationHistory.size > 4) {
+            val recent = conversationHistory.takeLast(2).toMutableList()
+            conversationHistory.clear()
+            conversationHistory.addAll(recent)
+        }
         val prompt = buildSchedulePrompt()
         addMsg("📅 $scheduleTitle ${stepProgressLabel()}", UserChatMessage.TYPE_MINE, false, null, null)
         uploadToServer(null, null, prompt)
     }
 
     private fun buildSchedulePrompt(): String {
-        // 서버가 시스템 프롬프트 처리하므로 사용자 발화(시작 신호)만 전달
-        return if (currentStepIndex == 0) "일정 시작" else "계속해주세요"
+        if (currentStepIndex == 0) return "일정 시작"
+        // 새 단계 시작 시 단계 이름을 명확하게 전달해서 AI 혼란 방지
+        val stepName = scheduleSteps.getOrElse(currentStepIndex) { "" }
+        return if (stepName.isNotBlank()) "다음 단계 시작: $stepName" else "다음 단계로 넘어가줘"
     }
 
     private fun stepProgressLabel() = if (scheduleSteps.isEmpty()) "시작" else "(${currentStepIndex + 1}/${scheduleSteps.size}단계)"
@@ -574,6 +613,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private fun proceedToNextStep() {
         if (!isScheduleMode) return
         sttFailCount = 0
+        awaitingFallbackButton = false
         voiceMsgIndex = -1
         currentStepIndex++
         if (scheduleSteps.isEmpty() || currentStepIndex >= scheduleSteps.size) {
@@ -601,7 +641,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                 if (summary.isNotBlank() && summaryMsgIndex < chatList.size) {
                     chatList[summaryMsgIndex].content = summary
                     adapter.notifyItemChanged(summaryMsgIndex)
-                    conversationHistory.add(UserChatLog("AI", summary))
+                    conversationHistory.add(UserChatLog("model", summary))
                     ttsManager.speak(summary)
                 }
             }
@@ -717,7 +757,10 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
             awaitingFallbackButton = false
             speechRecognizer?.cancel()
             isRecording = false
-            startRecordingFlow(manual = true)
+            // STT 재시작이 아니라 AI에게 "모르겠어요" 전달 → 도움 안내 받기
+            voiceMsgIndex = -1
+            addMsg(text, UserChatMessage.TYPE_MINE, false, null, null)
+            uploadToServer(null, null, text)
             return
         }
         voskManager.stopListening()

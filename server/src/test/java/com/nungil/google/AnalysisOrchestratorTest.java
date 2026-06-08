@@ -44,20 +44,25 @@ class AnalysisOrchestratorTest {
     }
 
     @Test
-    @DisplayName("buildSchedulePrompt가_stepComplete_단어를_포함하지않음")
-    void buildSchedulePrompt_stepComplete없음() throws Exception {
+    @DisplayName("buildSchedulePrompt_system에_단계이동은앱결정_명시_user에_단계명포함")
+    void buildSchedulePrompt_단계안내구조검증() throws Exception {
         Method m = AnalysisOrchestrator.class.getDeclaredMethod(
                 "buildSchedulePrompt", String.class, String.class, String.class,
                 String.class, String.class, int.class, int.class,
-                String.class, String.class);
+                String.class);
         m.setAccessible(true);
         String[] result = (String[]) m.invoke(orchestrator,
                 "사용자정보", "[]", "안녕",
                 "빨래하기", "세제 넣기", 1, 5,
-                "", "[\"빨래모으기\",\"세제넣기\"]");
-        assertEquals(2, result.length);
-        assertFalse(result[0].contains("stepComplete"), "system에 stepComplete 필드가 남아있으면 안 됨");
-        assertFalse(result[1].contains("stepComplete"), "user에 stepComplete 필드가 남아있으면 안 됨");
+                "");
+        assertEquals(2, result.length, "system + user 2개 반환");
+        // system: AI는 단계 이동을 직접 결정하지 않음을 명시
+        assertTrue(result[0].contains("앱이 결정"), "system 프롬프트에 '앱이 결정' 명시 필요");
+        // user: 현재 단계명과 일정명이 포함되어야 함
+        assertTrue(result[1].contains("빨래하기"), "user 메시지에 일정명 포함 필요");
+        assertTrue(result[1].contains("세제 넣기"), "user 메시지에 현재 단계명 포함 필요");
+        // user: 발화 내용도 포함
+        assertTrue(result[1].contains("안녕"), "user 메시지에 사용자 발화 포함 필요");
     }
 
     @Test

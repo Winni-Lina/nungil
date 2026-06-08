@@ -21,7 +21,17 @@ class NungilFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        if (Session.isLoggedIn()) registerTokenWithServer(token)
+        // 사용자 앱 토큰 등록 (FCM SCHEDULE_UPDATED를 받으려면 서버에 반드시 등록되어야 함)
+        val prefs   = getSharedPreferences("nungil_prefs", MODE_PRIVATE)
+        val userId  = prefs.getString("user_id", null)
+        val userIdx = prefs.getInt("user_idx", -1)
+        if (userId != null && userIdx >= 0) {
+            registerUserTokenWithServer(token, userId, userIdx)
+        }
+        // 보호자 앱 토큰 등록
+        if (Session.isLoggedIn()) {
+            registerTokenWithServer(token)
+        }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -92,6 +102,7 @@ class NungilFirebaseMessagingService : FirebaseMessagingService() {
     companion object {
         private val notifIdCounter = AtomicInteger(1)
 
+        /** 보호자 FCM 토큰 서버 등록 */
         fun registerTokenWithServer(token: String) {
             if (!Session.isLoggedIn()) return
             val body = JSONObject().apply {
@@ -99,6 +110,19 @@ class NungilFirebaseMessagingService : FirebaseMessagingService() {
                 put("fcmToken", token)
             }.toString()
             ApiClient.put("/v1/guardian/auth/fcm-token", body) { /* fire-and-forget */ }
+        }
+
+        /**
+         * 사용자 FCM 토큰 서버 등록 — QR 연동 완료 후 & 토큰 갱신 시 호출
+         * BASE_URL 이 이미 "~api" 로 끝나므로 path 는 /v1/ 부터 시작
+         */
+        fun registerUserTokenWithServer(token: String, userId: String, userIdx: Int) {
+            val body = JSONObject().apply {
+                put("userId", userId)
+                put("userIdx", userIdx)
+                put("fcmToken", token)
+            }.toString()
+            ApiClient.put("/v1/user/fcm-token", body) { /* fire-and-forget */ }
         }
     }
 }

@@ -49,7 +49,7 @@ public class AnalysisOrchestrator {
             String[] prompts = "schedule".equals(mode)
                     ? buildSchedulePrompt(userContext, historyJson, question,
                                           scheduleTitle, currentStep, stepIndex, totalSteps,
-                                          specialNote, stepsJson)
+                                          specialNote)
                     : buildChatPrompt(userContext, historyJson, question);
 
             String systemInstruction = prompts[0];
@@ -59,8 +59,24 @@ public class AnalysisOrchestrator {
             String rawResponse = geminiAdapter.sendRequest(systemInstruction, userMessage, base64Image, contentType);
 
             // ── 5. 응답 파싱 ──────────────────────────────────────────────────
+            //   responseSchema로 JSON이 보장되지만, 모델이 가끔 펜스(```json)나
+            //   이중 JSON을 섞어 answer 안에 중괄호가 노출되는 경우를 방어한다.
             String cleanJson = rawResponse.replaceAll("(?s)```json|```", "").trim();
             Map<String, Object> aiResult = objectMapper.readValue(cleanJson, Map.class);
+
+            // answer 세척: 펜스 제거 + answer가 통째로 JSON이면 안쪽 answer만 재추출
+            Object rawAnswer = aiResult.get("answer");
+            if (rawAnswer != null) {
+                String answer = String.valueOf(rawAnswer)
+                        .replaceAll("(?s)```json|```", "").trim();
+                if (answer.startsWith("{") && answer.contains("\"answer\"")) {
+                    try {
+                        Object inner = objectMapper.readValue(answer, Map.class).get("answer");
+                        if (inner != null) answer = String.valueOf(inner).trim();
+                    } catch (Exception ignore) { /* 파싱 실패 시 원본 유지 */ }
+                }
+                aiResult.put("answer", answer);
+            }
 
             Map<String, Object> result = new HashMap<>(aiResult);
             result.put("userId", userId);
@@ -73,99 +89,83 @@ public class AnalysisOrchestrator {
         }
     }
 
-    // ── 일반 채팅 프롬프트 (system / user 분리) ──────────────────────────────
+    // ── 자유 채팅 프롬프트 ────────────────────────────────────────────────────
     private String[] buildChatPrompt(String userContext, String historyJson, String question) {
-        String system = """
-                ## 역할
-                당신은 지적 장애인의 일상생활을 돕는 따뜻한 AI 친구 '똘똘이'입니다.
+        String system =
+            "너는 \"똘똘이\"야. 지적장애가 있는 친구의 궁금증을 풀어주는 따뜻한 AI 친구야.\n\n"
+            + "[답변 규칙]\n"
+            + "- 한 번에 한 가지만, 아주 쉽고 짧게.\n"
+            + "- 사물을 직접 봐야 답할 수 있으면 photoRequest를 true로 (예: \"이게 뭐야?\", \"어떤 거 먹어?\").\n"
+            + "- 인사·감정 표현 등 사진 없이 답할 수 있으면 photoRequest는 false.\n\n"
+            + "[말투 규칙]\n"
+            + "- 한 문장 15자 이내. 어려운 단어 금지.\n"
+            + "- 가끔 친구 이름을 부르며 따뜻하게, 칭찬·응원 자주.\n"
+            + "- 특이사항 고려 (예: 큰 소리 무서워함 → 재촉·느낌표 남발 금지).\n\n"
+            + "[안전]\n"
+            + "- 보호자가 허용한 활동만 권하기. 그 외엔 \"보호자에게 물어보자\".\n"
+            + "- 위급해 보이면 \"어른에게 말하자\". 직접 의료·약 판단 금지.\n"
+            + "- 같은 질문을 반복해도 친절 유지.\n\n"
+            + "[필드 의미]\n"
+            + "- suggestedQuestions: 2~3개, 보호자 허용 활동 안에서, 누르기 쉬운 짧은 말.\n"
+            + "- stepComplete: chat 모드에선 항상 false.";
 
-                ## 말투 규칙
-                - 한 문장은 15자 이내로 짧게
-                - 어려운 단어 절대 사용 금지
-                - 따뜻하고 응원하는 말투
-                - 한 번에 한 가지만 말하기
-
-                ## 사진 요청 규칙
-                - 상황을 직접 봐야 더 잘 도울 수 있다고 판단되면 photoRequest를 true로 설정
-
-                반드시 아래 JSON 형식으로만 응답해. 다른 말 하지 마:
-                {
-                  "answer": "짧고 따뜻한 답변",
-                  "suggestedQuestions": ["질문1", "질문2", "질문3"],
-                  "photoRequest": false
-                }
-                """;
-
-        String user = "## 사용자 정보\n"
-                + (userContext != null && !userContext.isBlank() ? userContext : "(정보 없음)")
-                + "\n\n## 이전 대화\n"
-                + safeHistory(historyJson)
-                + "\n\n## 지금 사용자가 한 말\n\""
-                + question + "\"";
+        String user = (userContext != null && !userContext.isBlank() ? userContext + "\n\n" : "")
+                + "[이전 대화]\n" + safeHistory(historyJson)
+                + "\n\n[사용자 질문] " + question;
 
         return new String[]{ system, user };
     }
 
-    // ── 일정 실행 프롬프트 (system / user 분리) ──────────────────────────────
-    // 단계 완료 판단은 클라이언트가 키워드로 처리한다. AI는 안내/질문 대응만 한다.
+    // ── 일정 수행 프롬프트 ────────────────────────────────────────────────────
+    // 단계 완료 판단은 클라이언트 키워드 감지가 소유. AI는 안내·질문대응만 함.
     private String[] buildSchedulePrompt(
             String userContext, String historyJson, String question,
             String scheduleTitle, String currentStep,
             int stepIndex, int totalSteps,
-            String specialNote, String stepsJson) {
+            String specialNote) {
 
-        // 단계 목록 텍스트 변환
-        String stepsList = parseStepsList(stepsJson, scheduleTitle);
-        String stepStr   = (currentStep != null && !currentStep.isBlank()) ? currentStep : scheduleTitle;
+        String stepStr = (currentStep != null && !currentStep.isBlank()) ? currentStep : scheduleTitle;
 
-        String system = "## 역할\n"
-                + "당신은 지적 장애인이 일정을 스스로 완수할 수 있도록 현재 단계를 안내하는 생활 보조 AI입니다.\n\n"
-                + "## 핵심 행동 원칙\n"
-                + "- 반드시 '지금 진행 중인 단계'만 안내합니다.\n"
-                + "- 절대 스스로 다음 단계로 넘기지 않습니다. 단계 이동은 시스템(앱)이 결정합니다.\n"
-                + "- 사용자가 단계와 관련된 질문을 하면 친절하게 도와줍니다.\n"
-                + "- 관련 없는 질문에는 \"지금은 [현재 단계]를 먼저 해볼까요?\" 라고 유도합니다.\n\n"
-                + "## 말투 규칙\n"
-                + "- 한 문장 15자 이내\n"
-                + "- 어려운 단어 금지\n"
-                + "- 단계 안내 시 마지막에 반드시 \"다 하면 말해줘!\" 붙이기\n\n"
-                + "반드시 아래 JSON 형식으로만 응답해. 다른 말 하지 마:\n"
-                + "{\n"
-                + "  \"answer\": \"안내 메시지\",\n"
-                + "  \"suggestedQuestions\": [],\n"
-                + "  \"photoRequest\": false\n"
-                + "}";
+        String system =
+            "너는 \"똘똘이\"야. 지적장애가 있는 친구가 정해진 일정을 한 단계씩 끝까지 해내도록 돕는 생활 보조 AI 친구야.\n"
+            + "일정의 단계 순서와 내용은 미리 정해져 있어. 반드시 그 순서대로만, 한 번에 한 단계씩 안내해.\n"
+            + "지금 단계를 마치기 전엔 절대 다음 단계로 넘어가지 마. 단계 이동은 앱이 결정해.\n\n"
+            + "[매 발화마다 4가지 중 하나로 분류하고 행동]\n\n"
+            + "① 완료 신호 (\"다 했어\",\"했어\",\"완료\",\"끝났어\",\"됐어\" 등)\n"
+            + "   → 짧게 칭찬하고 stepComplete=true.\n\n"
+            + "② 일정과 관련된 질문\n"
+            + "   = 지금 단계 하는 법 / 도구·물건 / 이 일정 자체에 관한 것\n"
+            + "   → 짧고 쉽게 답해주고, 다시 지금 단계로 돌아오게 해. stepComplete=false.\n"
+            + "   → 사물을 직접 봐야 답할 수 있으면 photoRequest=true.\n\n"
+            + "③ 일정과 관련 없는 말 (\"엄마 언제 와?\", \"심심해\" 등)\n"
+            + "   → 따뜻하게 한 번 받아준 뒤, 지금 단계로 부드럽게 유도. stepComplete=false.\n\n"
+            + "④ 못 하겠다·하기 싫다·힘들어함\n"
+            + "   → 재촉하지 말고 응원하며 더 쉽게 다시 안내. stepComplete=false.\n\n"
+            + "* 애매하면 ②로 보고 짧게 답해줘.\n"
+            + "* 같은 질문을 또 해도 짜증 없이 똑같이 친절하게.\n\n"
+            + "[말투 규칙]\n"
+            + "- 한 문장 15자 이내. 한 번에 한 가지만. 어려운 단어 금지.\n"
+            + "- 새 단계를 처음 안내할 땐 answer 마지막에 꼭 \"다 하면 말해줘!\"\n"
+            + "- 친구의 특이사항을 고려해 말투 조절.\n\n"
+            + "[안전] 위급해 보이면 \"어른에게 말하자\"로 안내. 직접 의료·약 판단 금지.\n\n"
+            + "[필드 의미]\n"
+            + "- photoRequest: 사용자가 \"이게 뭐야?\", \"이거 맞아?\" 처럼 사물을 직접 보여줘야만 답할 수 있을 때만 true. 단계 완료 확인 목적으로는 절대 true 하지 마.\n"
+            + "- suggestedQuestions: 일정 수행 중엔 빈 배열([]).";
 
         StringBuilder user = new StringBuilder();
         if (userContext != null && !userContext.isBlank()) {
-            user.append("## 사용자 정보\n").append(userContext).append("\n\n");
+            user.append(userContext).append("\n\n");
         }
         if (specialNote != null && !specialNote.isBlank()) {
-            user.append("## 이번 일정 특이사항\n").append(specialNote).append("\n\n");
+            user.append("[이번 일정 특이사항] ").append(specialNote).append("\n\n");
         }
-        user.append("## 오늘 일정\n일정명: ").append(scheduleTitle).append("\n\n")
-            .append("전체 단계:\n").append(stepsList).append("\n\n")
-            .append("## 지금 진행 중인 단계\n")
-            .append(stepIndex + 1).append("/").append(totalSteps).append(" 단계: ").append(stepStr).append("\n\n")
-            .append("## 이전 대화\n").append(safeHistory(historyJson)).append("\n\n")
-            .append("## 지금 사용자가 한 말\n\"").append(question).append("\"");
+        user.append("[일정] ").append(scheduleTitle).append("\n")
+            .append("[현재 단계] ").append(stepIndex + 1).append("/").append(totalSteps)
+            .append(" — ").append(stepStr).append("\n\n")
+            .append("[이전 대화]\n").append(safeHistory(historyJson)).append("\n\n")
+            .append("[사용자 말] ").append(question);
 
         return new String[]{ system, user.toString() };
-    }
-
-    /** stepsJson 배열 → "1. xxx\n2. xxx" 문자열 변환 */
-    private String parseStepsList(String stepsJson, String fallback) {
-        if (stepsJson == null || stepsJson.isBlank() || stepsJson.equals("[]")) return fallback;
-        try {
-            com.fasterxml.jackson.databind.JsonNode arr = objectMapper.readTree(stepsJson);
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < arr.size(); i++) {
-                sb.append(i + 1).append(". ").append(arr.get(i).asText()).append("\n");
-            }
-            return sb.toString().trim();
-        } catch (Exception e) {
-            return fallback;
-        }
     }
 
     /** historyJson이 비어있거나 파싱 불가면 "(대화 없음)" 반환 */
