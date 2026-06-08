@@ -18,6 +18,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Log
 import android.view.View
+import android.widget.Toast
 import android.widget.ImageView
 import android.widget.ProgressBar
 import androidx.activity.result.contract.ActivityResultContracts
@@ -79,6 +80,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private var isRecording = false
     private var voiceMsgIndex = -1
     private var shouldLaunchCamera = false
+    private var pendingCameraLaunch = false
     private var speechRecognizer: SpeechRecognizer? = null
     private var sttFailCount = 0
     private var awaitingFallbackButton = false
@@ -516,10 +518,26 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     }
 
     private fun openBackCamera() {
+        // 매니페스트에 CAMERA 권한이 선언돼 있으면 ACTION_IMAGE_CAPTURE도 런타임 허용이 있어야 동작한다.
+        // 허용이 없으면 launch가 SecurityException을 던지므로, 먼저 확인하고 없으면 요청 후 재시도한다.
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            Log.w("Camera", "CAMERA 권한 미허용 → 권한 요청")
+            Toast.makeText(this, "사진을 찍으려면 카메라 권한을 허용해주세요.", Toast.LENGTH_SHORT).show()
+            pendingCameraLaunch = true
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 101)
+            return
+        }
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
             putExtra("android.intent.extras.CAMERA_FACING", 0)
         }
-        try { takePictureLauncher.launch(intent) } catch (e: Exception) { resetToIdleState() }
+        try {
+            takePictureLauncher.launch(intent)
+        } catch (e: Exception) {
+            // 더 이상 조용히 삼키지 않고 원인을 노출한다 (카메라 앱 없음/보안 예외 등)
+            Log.e("Camera", "카메라 실행 실패: ${e.message}", e)
+            Toast.makeText(this, "카메라를 열 수 없어요: ${e.message}", Toast.LENGTH_LONG).show()
+            resetToIdleState()
+        }
     }
 
     private fun resetToIdleState() {
@@ -740,6 +758,18 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 100 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) voskManager.initModel()
+        // 카메라 권한 요청 결과 처리 → 허용됐으면 대기 중이던 촬영을 이어서 실행
+        if (requestCode == 101) {
+            val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+            if (granted && pendingCameraLaunch) {
+                pendingCameraLaunch = false
+                openBackCamera()
+            } else {
+                pendingCameraLaunch = false
+                Toast.makeText(this, "카메라 권한이 없어 사진을 찍을 수 없어요.", Toast.LENGTH_SHORT).show()
+                resetToIdleState()
+            }
+        }
     }
 
     override fun onSuggestionClick(text: String?) {
