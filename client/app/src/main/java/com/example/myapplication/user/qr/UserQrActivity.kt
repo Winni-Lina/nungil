@@ -81,7 +81,7 @@ class UserQrActivity : AppCompatActivity() {
                     put("userIdx", userIdx)
                     put("fcmToken", token)
                 }.toString()
-                ApiClient.put("/api/v1/user/fcm-token", body) {}
+                ApiClient.put("/v1/user/fcm-token", body) {}
             }
 
             startActivity(Intent(this, UserChatActivity::class.java).apply {

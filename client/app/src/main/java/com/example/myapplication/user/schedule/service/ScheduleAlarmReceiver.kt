@@ -16,6 +16,9 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
         val title = intent.getStringExtra("schedule_title") ?: "일정"
         android.util.Log.d("AlarmDebug", "알람 수신: scheduleId=$scheduleId title=$title")
 
+        // 알람 내역 기록 (알림 센터용)
+        AlarmEventLog.record(context, scheduleId, title, AlarmEventLog.Status.FIRED)
+
         // 알림 표시 (앱 백그라운드 대비)
         ScheduleManager(context).showNotification(scheduleId, title)
 

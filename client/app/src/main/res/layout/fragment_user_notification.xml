@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bgPage">
+
+    <!-- 헤더 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="알림 내역"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/textPrimary"/>
+
+        <TextView
+            android:id="@+id/tvClear"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="전체 삭제"
+            android:textSize="13sp"
+            android:textColor="@color/textSecondary"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"/>
+
+    </LinearLayout>
+
+    <!-- 마지막 동기화 시각 -->
+    <TextView
+        android:id="@+id/tvLastSync"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="동기화 정보 없음"
+        android:textSize="12sp"
+        android:textColor="@color/textSecondary"
+        android:paddingHorizontal="16dp"
+        android:paddingBottom="8dp"/>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/colorDivider"/>
+
+    <!-- 비어있을 때 -->
+    <TextView
+        android:id="@+id/tvEmpty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="아직 알림 내역이 없어요"
+        android:textSize="14sp"
+        android:textColor="@color/textSecondary"
+        android:gravity="center"
+        android:padding="48dp"
+        android:visibility="gone"/>
+
+    <!-- 목록 -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvNotifications"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingBottom="8dp"/>
+
+</LinearLayout>

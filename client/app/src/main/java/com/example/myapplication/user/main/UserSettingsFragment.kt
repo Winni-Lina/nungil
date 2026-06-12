@@ -5,11 +5,20 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.example.myapplication.R
 import com.example.myapplication.RoleSelectActivity
+import com.example.myapplication.user.schedule.service.AlarmEventLog
+import com.example.myapplication.user.schedule.service.ScheduleManager
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class UserSettingsFragment : Fragment() {
+
+    private val dateFmt = SimpleDateFormat("M월 d일 HH:mm", Locale.KOREAN)
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -19,7 +28,27 @@ class UserSettingsFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val prefs = requireContext().getSharedPreferences("nungil_prefs", 0)
+        val tvLastSync = view.findViewById<TextView>(R.id.tvLastSyncSettings)
 
+        // 마지막 동기화 시각 표시
+        refreshLastSync(tvLastSync)
+
+        // 지금 동기화 버튼
+        view.findViewById<View>(R.id.layoutSync).setOnClickListener {
+            val userId  = prefs.getString("user_id", null) ?: return@setOnClickListener
+            val userIdx = prefs.getInt("user_idx", -1).takeIf { it >= 0 } ?: return@setOnClickListener
+            Toast.makeText(requireContext(), "동기화 중...", Toast.LENGTH_SHORT).show()
+            Thread {
+                ScheduleManager(requireContext()).syncSchedulesFromDB(userId, userIdx)
+                AlarmEventLog.saveLastSync(requireContext())
+                requireActivity().runOnUiThread {
+                    refreshLastSync(tvLastSync)
+                    Toast.makeText(requireContext(), "동기화 완료!", Toast.LENGTH_SHORT).show()
+                }
+            }.start()
+        }
+
+        // 로그아웃
         view.findViewById<View>(R.id.layoutLogout).setOnClickListener {
             prefs.edit()
                 .remove("user_id")
@@ -29,5 +58,16 @@ class UserSettingsFragment : Fragment() {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             })
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        view?.findViewById<TextView>(R.id.tvLastSyncSettings)?.let { refreshLastSync(it) }
+    }
+
+    private fun refreshLastSync(tv: TextView) {
+        val last = AlarmEventLog.getLastSyncMillis(requireContext())
+        tv.text = if (last == 0L) "마지막 동기화: 없음"
+                  else "마지막 동기화: ${dateFmt.format(Date(last))}"
     }
 }

@@ -13,6 +13,7 @@ import com.example.myapplication.R
 import com.example.myapplication.core.network.ApiResult
 import com.example.myapplication.guardian.schedule.data.ScheduleRepository
 import com.example.myapplication.model.Task
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.TextInputEditText
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -43,6 +44,10 @@ class ScheduleAddActivity : AppCompatActivity() {
     private lateinit var pbStepsLoading: ProgressBar
     private lateinit var tvStepTimeout: TextView
     private lateinit var llSteps: LinearLayout
+    private lateinit var switchRepeat: SwitchMaterial
+    private lateinit var llRepeatOptions: LinearLayout
+    // 요일 토글버튼 (Calendar.MONDAY=2 ~ Calendar.SUNDAY=1 순서)
+    private val dayToggles = mutableMapOf<Int, ToggleButton>() // key = Calendar.DAY_OF_WEEK
 
     private val handler = Handler(Looper.getMainLooper())
     private val timeoutRunnable = Runnable {
@@ -70,6 +75,21 @@ class ScheduleAddActivity : AppCompatActivity() {
         pbStepsLoading   = findViewById(R.id.pbStepsLoading)
         tvStepTimeout    = findViewById(R.id.tvStepTimeout)
         llSteps          = findViewById(R.id.llSteps)
+        switchRepeat     = findViewById(R.id.switchRepeat)
+        llRepeatOptions  = findViewById(R.id.llRepeatOptions)
+
+        // 요일 토글 매핑 (Calendar 상수 기준)
+        dayToggles[Calendar.MONDAY]    = findViewById(R.id.tbMon)
+        dayToggles[Calendar.TUESDAY]   = findViewById(R.id.tbTue)
+        dayToggles[Calendar.WEDNESDAY] = findViewById(R.id.tbWed)
+        dayToggles[Calendar.THURSDAY]  = findViewById(R.id.tbThu)
+        dayToggles[Calendar.FRIDAY]    = findViewById(R.id.tbFri)
+        dayToggles[Calendar.SATURDAY]  = findViewById(R.id.tbSat)
+        dayToggles[Calendar.SUNDAY]    = findViewById(R.id.tbSun)
+
+        switchRepeat.setOnCheckedChangeListener { _, checked ->
+            llRepeatOptions.visibility = if (checked) View.VISIBLE else View.GONE
+        }
 
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
 
@@ -302,21 +322,98 @@ class ScheduleAddActivity : AppCompatActivity() {
                 .setMessage("📋 $taskName\n🕐 $selectedDate $timeStr\n📍 $locationLabel\n📝 $stepInfo\n\n이 일정을 저장하고 알림을 설정할까요?")
                 .setPositiveButton("확인") { _, _ ->
                     btnSave.isEnabled = false
-                    repository.addSchedule(selectedTaskId, selectedDate, timeStr, location, note, steps) { result ->
-                        runOnUiThread {
-                            btnSave.isEnabled = true
-                            when (result) {
-                                is ApiResult.Success -> {
-                                    Toast.makeText(this, "일정이 등록됐어요!", Toast.LENGTH_SHORT).show()
-                                    finish()
+                    val isRepeat = switchRepeat.isChecked
+                    val selectedDays = if (isRepeat) {
+                        dayToggles.filter { it.value.isChecked }.keys.toList()
+                    } else emptyList()
+
+                    if (isRepeat && selectedDays.isEmpty()) {
+                        Toast.makeText(this, "반복할 요일을 하나 이상 선택해주세요.", Toast.LENGTH_SHORT).show()
+                        btnSave.isEnabled = true
+                        return@setPositiveButton
+                    }
+
+                    if (!isRepeat) {
+                        // 단일 일정 등록
+                        repository.addSchedule(selectedTaskId, selectedDate, timeStr, location, note, steps) { result ->
+                            runOnUiThread {
+                                btnSave.isEnabled = true
+                                when (result) {
+                                    is ApiResult.Success -> {
+                                        Toast.makeText(this, "일정이 등록됐어요!", Toast.LENGTH_SHORT).show()
+                                        finish()
+                                    }
+                                    is ApiResult.Error -> Toast.makeText(this, "등록 실패: ${result.message}", Toast.LENGTH_SHORT).show()
                                 }
-                                is ApiResult.Error -> Toast.makeText(this, "등록 실패: ${result.message}", Toast.LENGTH_SHORT).show()
                             }
                         }
+                    } else {
+                        // 반복 일정 등록 (4주 = 28일치, 선택 요일에 해당하는 날짜)
+                        val dates = buildRepeatDates(selectedDays, 28)
+                        registerRepeatSchedules(dates, timeStr, location, note, steps, btnSave)
                     }
                 }
                 .setNegativeButton("취소", null)
                 .show()
+        }
+    }
+
+    /**
+     * 오늘부터 [daysAhead]일 이내에서 [targetDays] 요일(Calendar.MONDAY 등)에 해당하는 날짜 반환
+     */
+    private fun buildRepeatDates(targetDays: List<Int>, daysAhead: Int): List<String> {
+        val result = mutableListOf<String>()
+        val cal = Calendar.getInstance()
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        for (i in 0..daysAhead) {
+            if (cal.get(Calendar.DAY_OF_WEEK) in targetDays) {
+                result.add(fmt.format(cal.time))
+            }
+            cal.add(Calendar.DAY_OF_MONTH, 1)
+        }
+        return result
+    }
+
+    /**
+     * dates 목록 순서대로 순차 등록. 실패 시 Toast만 표시하고 계속 진행.
+     */
+    private fun registerRepeatSchedules(
+        dates: List<String>,
+        time: String,
+        location: String,
+        note: String,
+        steps: List<String>,
+        btnSave: com.google.android.material.button.MaterialButton
+    ) {
+        var successCount = 0
+        var failCount    = 0
+        var pending      = dates.size
+
+        if (pending == 0) {
+            btnSave.isEnabled = true
+            Toast.makeText(this, "해당 요일이 없어요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        Toast.makeText(this, "루틴 등록 중... (총 ${dates.size}회)", Toast.LENGTH_SHORT).show()
+
+        dates.forEach { date ->
+            repository.addSchedule(selectedTaskId, date, time, location, note, steps) { result ->
+                when (result) {
+                    is ApiResult.Success -> successCount++
+                    is ApiResult.Error   -> failCount++
+                }
+                pending--
+                if (pending == 0) {
+                    runOnUiThread {
+                        btnSave.isEnabled = true
+                        val msg = if (failCount == 0) "루틴 ${successCount}회 등록 완료!"
+                                  else "루틴 등록 완료 (성공 $successCount / 실패 $failCount)"
+                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                        if (successCount > 0) finish()
+                    }
+                }
+            }
         }
     }
 

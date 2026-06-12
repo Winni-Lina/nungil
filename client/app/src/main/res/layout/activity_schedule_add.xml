@@ -275,6 +275,94 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- 반복 설정 카드 -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="@color/bgCard">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="🔁 반복 일정 (루틴)"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/colorPrimary"/>
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/switchRepeat"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"/>
+
+                    </LinearLayout>
+
+                    <!-- 반복 요일 선택 (스위치 ON일 때만 표시) -->
+                    <LinearLayout
+                        android:id="@+id/llRepeatOptions"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        android:layout_marginTop="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="반복할 요일 선택 (4주 동안 등록)"
+                            android:textSize="12sp"
+                            android:textColor="@color/textSecondary"
+                            android:layout_marginBottom="8dp"/>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <ToggleButton android:id="@+id/tbMon"
+                                android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1"
+                                android:textOff="월" android:textOn="월" android:textSize="12sp" android:layout_margin="2dp"/>
+                            <ToggleButton android:id="@+id/tbTue"
+                                android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1"
+                                android:textOff="화" android:textOn="화" android:textSize="12sp" android:layout_margin="2dp"/>
+                            <ToggleButton android:id="@+id/tbWed"
+                                android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1"
+                                android:textOff="수" android:textOn="수" android:textSize="12sp" android:layout_margin="2dp"/>
+                            <ToggleButton android:id="@+id/tbThu"
+                                android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1"
+                                android:textOff="목" android:textOn="목" android:textSize="12sp" android:layout_margin="2dp"/>
+                            <ToggleButton android:id="@+id/tbFri"
+                                android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1"
+                                android:textOff="금" android:textOn="금" android:textSize="12sp" android:layout_margin="2dp"/>
+                            <ToggleButton android:id="@+id/tbSat"
+                                android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1"
+                                android:textOff="토" android:textOn="토" android:textSize="12sp" android:layout_margin="2dp"/>
+                            <ToggleButton android:id="@+id/tbSun"
+                                android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1"
+                                android:textOff="일" android:textOn="일" android:textSize="12sp" android:layout_margin="2dp"/>
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- 하단 여백 (버튼 위 공간 확보) -->
             <View android:layout_width="match_parent" android:layout_height="8dp"/>
 

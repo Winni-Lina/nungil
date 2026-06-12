@@ -19,9 +19,10 @@ class UserMainActivity : AppCompatActivity() {
         val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
 
         viewPager.adapter = object : FragmentStateAdapter(this) {
-            override fun getItemCount() = 2
+            override fun getItemCount() = 3
             override fun createFragment(position: Int): Fragment = when (position) {
                 0 -> UserScheduleFragment()
+                1 -> UserNotificationFragment()
                 else -> UserSettingsFragment()
             }
         }
@@ -29,6 +30,7 @@ class UserMainActivity : AppCompatActivity() {
         TabLayoutMediator(tabLayout, viewPager) { tab, pos ->
             tab.text = when (pos) {
                 0 -> "📅 일정"
+                1 -> "🔔 알림"
                 else -> "⚙ 설정"
             }
         }.attach()

@@ -11,6 +11,67 @@
         android:orientation="vertical"
         android:padding="16dp">
 
+        <!-- 동기화 섹션 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="알람 동기화"
+            android:textSize="13sp"
+            android:textColor="@color/textSecondary"
+            android:paddingBottom="8dp"/>
+
+        <androidx.cardview.widget.CardView
+            xmlns:app="http://schemas.android.com/apk/res-auto"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/layoutSync"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="16dp"
+                    android:background="?attr/selectableItemBackground">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🔄  지금 동기화"
+                        android:textSize="15sp"
+                        android:textColor="@color/textPrimary"/>
+
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/colorDivider"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginEnd="16dp"/>
+
+                <TextView
+                    android:id="@+id/tvLastSyncSettings"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="마지막 동기화: 없음"
+                    android:textSize="12sp"
+                    android:textColor="@color/textSecondary"
+                    android:padding="16dp"/>
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
         <!-- 계정 섹션 -->
         <TextView
             android:layout_width="wrap_content"

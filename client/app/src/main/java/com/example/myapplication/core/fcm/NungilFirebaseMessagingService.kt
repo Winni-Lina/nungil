@@ -11,6 +11,7 @@ import com.example.myapplication.R
 import com.example.myapplication.core.network.ApiClient
 import com.example.myapplication.core.network.Session
 import com.example.myapplication.guardian.notification.NotificationDialogActivity
+import com.example.myapplication.user.schedule.service.AlarmEventLog
 import com.example.myapplication.user.schedule.service.ScheduleManager
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -47,6 +48,7 @@ class NungilFirebaseMessagingService : FirebaseMessagingService() {
             val userId  = prefs.getString("user_id", null) ?: return
             val userIdx = prefs.getInt("user_idx", -1).takeIf { it >= 0 } ?: return
             ScheduleManager(this).syncSchedulesFromDB(userId, userIdx)
+            AlarmEventLog.saveLastSync(this)
             return
         }
 
