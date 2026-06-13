@@ -1,7 +1,6 @@
 package com.example.myapplication.guardian.schedule.ui
 
 import android.app.DatePickerDialog
-import android.app.TimePickerDialog
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -15,6 +14,8 @@ import com.example.myapplication.guardian.schedule.data.ScheduleRepository
 import com.example.myapplication.model.Task
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.timepicker.MaterialTimePicker
+import com.google.android.material.timepicker.TimeFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -95,10 +96,8 @@ class ScheduleAddActivity : AppCompatActivity() {
 
         refreshDateTimeDisplay()
 
-        findViewById<com.google.android.material.button.MaterialButton>(R.id.btnChangeDate)
-            .setOnClickListener { showDatePicker() }
-
-        tvPrefilledTime.setOnClickListener { showTimePicker() }
+        findViewById<View>(R.id.rowDate).setOnClickListener { showDatePicker() }
+        findViewById<View>(R.id.rowTime).setOnClickListener { showTimePicker() }
 
         val btnSave = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSave)
 
@@ -114,7 +113,12 @@ class ScheduleAddActivity : AppCompatActivity() {
         } catch (_: Exception) {
             tvPrefilledDate.text = selectedDate
         }
-        tvPrefilledTime.text = "%02d:%02d".format(selectedHour, selectedMinute)
+        val timeCal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, selectedHour)
+            set(Calendar.MINUTE, selectedMinute)
+        }
+        // 오전/오후 h:mm (예: 오후 2:30) — 보호자 친숙
+        tvPrefilledTime.text = SimpleDateFormat("a h:mm", Locale.KOREAN).format(timeCal.time)
     }
 
     private fun showDatePicker() {
@@ -126,11 +130,19 @@ class ScheduleAddActivity : AppCompatActivity() {
     }
 
     private fun showTimePicker() {
-        TimePickerDialog(this, { _, hour, minute ->
-            selectedHour   = hour
-            selectedMinute = minute
+        val picker = MaterialTimePicker.Builder()
+            .setTimeFormat(TimeFormat.CLOCK_12H)            // 오전/오후 표시
+            .setInputMode(MaterialTimePicker.INPUT_MODE_CLOCK) // 시계판으로 시작(키보드 토글 가능)
+            .setHour(selectedHour)
+            .setMinute(selectedMinute)
+            .setTitleText("시간 선택")
+            .build()
+        picker.addOnPositiveButtonClickListener {
+            selectedHour   = picker.hour    // 0~23 (24h 기준 저장)
+            selectedMinute = picker.minute
             refreshDateTimeDisplay()
-        }, selectedHour, selectedMinute, true).show()
+        }
+        picker.show(supportFragmentManager, "time_picker")
     }
 
     private val locationOptions = arrayOf("세탁실", "부엌", "거실", "화장실", "방", "기타")

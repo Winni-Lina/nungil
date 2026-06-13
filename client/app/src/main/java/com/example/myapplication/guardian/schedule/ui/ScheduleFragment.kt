@@ -1,7 +1,6 @@
 package com.example.myapplication.guardian.schedule.ui
 
 import android.app.DatePickerDialog
-import android.app.TimePickerDialog
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -20,6 +19,8 @@ import com.example.myapplication.guardian.schedule.viewmodel.ScheduleViewModel
 import com.example.myapplication.model.Schedule
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.timepicker.MaterialTimePicker
+import com.google.android.material.timepicker.TimeFormat
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -213,18 +214,30 @@ class ScheduleFragment : Fragment() {
                 val cal = Calendar.getInstance()
                 DatePickerDialog(requireContext(), { _, y, m, d ->
                     editDate = "%04d-%02d-%02d".format(y, m + 1, d)
-                    TimePickerDialog(requireContext(), { _, h, min ->
+                    pickTime(editHour, editMinute) { h, min ->
                         viewModel.updateScheduleTime(schedule.scheduleId, editDate, "%02d:%02d".format(h, min))
-                    }, editHour, editMinute, true).show()
+                    }
                 }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
             }
             .setPositiveButton("시간만 변경") { _, _ ->
-                TimePickerDialog(requireContext(), { _, h, min ->
+                pickTime(editHour, editMinute) { h, min ->
                     viewModel.updateScheduleTime(schedule.scheduleId, editDate, "%02d:%02d".format(h, min))
-                }, editHour, editMinute, true).show()
+                }
             }
             .setNegativeButton("닫기", null)
             .show()
+    }
+
+    /** Material 시간 선택기 (오전/오후, 시계판+키보드 토글). hour는 0~23로 콜백 */
+    private fun pickTime(initialHour: Int, initialMinute: Int, onPicked: (Int, Int) -> Unit) {
+        val picker = MaterialTimePicker.Builder()
+            .setTimeFormat(TimeFormat.CLOCK_12H)
+            .setHour(initialHour)
+            .setMinute(initialMinute)
+            .setTitleText("시간 선택")
+            .build()
+        picker.addOnPositiveButtonClickListener { onPicked(picker.hour, picker.minute) }
+        picker.show(childFragmentManager, "time_picker")
     }
 
     override fun onResume() {

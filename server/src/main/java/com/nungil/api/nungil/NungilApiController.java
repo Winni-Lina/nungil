@@ -36,41 +36,6 @@ public class NungilApiController {
     }
 
     /**
-     * API 1: 보호자 로그인
-     * POST /api/v1/guardian/login
-     * Body: { "guardianId": "guardian01", "password": "1234" }
-     */
-    @PostMapping("/guardian/login")
-    public Map<String, Object> login(@RequestBody Map<String, Object> body) {
-        System.out.println("[API] POST /api/v1/guardian/login | guardianId=" + body.get("guardianId"));
-        Map<String, Object> response = new HashMap<>();
-        try {
-            String guardianId = (String) body.get("guardianId");
-            String password   = (String) body.get("password");
-
-            GuardianVO guardian = guardianService.login(guardianId, password);
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("guardianId", guardian.getId());
-            result.put("name", guardian.getName());
-
-            System.out.println("[결과] 로그인 성공 guardianId=" + guardian.getId());
-            response.put("status", "SUCCESS");
-            response.put("result", result);
-        } catch (IllegalArgumentException e) {
-            System.out.println("[결과] 로그인 실패 - 잘못된 자격증명");
-            response.put("status", "ERROR");
-            response.put("errorCode", "INVALID_CREDENTIALS");
-            response.put("message", "아이디 또는 비밀번호가 올바르지 않습니다");
-        } catch (Exception e) {
-            System.out.println("[ERROR] " + e.getMessage());
-            response.put("status", "ERROR");
-            response.put("message", e.getMessage());
-        }
-        return response;
-    }
-
-    /**
      * API 2: 사용자 정보 조회 (특이사항 + 화이트리스트 과업명)
      * GET /api/v1/user/{userId}/{userIdx}
      */
@@ -191,34 +156,6 @@ public class NungilApiController {
             scheduleMapper.incrementQuestionCount(scheduleId);
             System.out.println("[결과] question_count 증가 scheduleId=" + scheduleId);
             response.put("status", "SUCCESS");
-        } catch (Exception e) {
-            System.out.println("[ERROR] " + e.getMessage());
-            response.put("status", "ERROR");
-            response.put("message", e.getMessage());
-        }
-        return response;
-    }
-
-    /**
-     * API 5: 피보호자 신규 연동
-     * POST /api/v1/user/link
-     * Body: { "guardianId": "guardian01" }
-     */
-    @PostMapping("/user/link")
-    public Map<String, Object> linkUser(@RequestBody Map<String, Object> body) {
-        System.out.println("[API] POST /api/v1/user/link | guardianId=" + body.get("guardianId"));
-        Map<String, Object> response = new HashMap<>();
-        try {
-            String guardianId = (String) body.get("guardianId");
-            NungilUserVO user = nungilUserService.createUser(guardianId);
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("userId", user.getId());
-            result.put("userIdx", user.getIdx());
-
-            System.out.println("[결과] 피보호자 생성 완료 userIdx=" + user.getIdx());
-            response.put("status", "SUCCESS");
-            response.put("result", result);
         } catch (Exception e) {
             System.out.println("[ERROR] " + e.getMessage());
             response.put("status", "ERROR");
