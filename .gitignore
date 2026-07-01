@@ -73,3 +73,6 @@ seed_runner.py
 
 # MS Office 임시 잠금파일
 ~$*
+
+# 빌드 산출물 APK (배포는 GitHub Releases 사용, 100MB 초과 방지)
+*.apk

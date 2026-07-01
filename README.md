@@ -17,7 +17,7 @@ AI 어시스턴트 **똘똘이**가 일상 과업을 한 단계씩 음성으로 
 ![STT](https://img.shields.io/badge/Voice-Google%20STT-34A853?logo=google&logoColor=white)
 ![Tests](https://img.shields.io/badge/Tests-28%20passing-success)
 
-**[📱 APK 다운로드](https://github.com/Winni-Lina/nungil/releases/latest)** · **[📖 실행 가이드](INSTALL.md)** · **[📄 기술 보고서](docs/technical_report.md)**
+**[📱 APK 다운로드](https://github.com/Winni-Lina/nungil/releases/latest)** · **[📖 실행 가이드](INSTALL.md)** · **[📄 기술 보고서](기술보고서.md)**
 
 </div>
 
@@ -217,7 +217,7 @@ AI(Gemini)는 딱 세 시점에만 호출된다.
 
 커버리지: AI 파이프라인 54% · 보호자 도메인 53%
 
-AI 프롬프트 실호출 검증: **8개 시나리오 중 7개 통과 (87.5%)** → [검증 결과 상세](docs/technical_report.md#52-ai-프롬프트-성능-평가-실-서버-직접-호출)
+AI 프롬프트 실호출 검증: **8개 시나리오 중 7개 통과 (87.5%)** → [검증 결과 상세](기술보고서.md#52-ai-프롬프트-성능-평가-실-서버-직접-호출)
 
 ---
 
@@ -225,7 +225,7 @@ AI 프롬프트 실호출 검증: **8개 시나리오 중 7개 통과 (87.5%)** 
 
 APK 한 번에 설치하거나, 소스에서 직접 빌드하는 방법 모두 **[INSTALL.md](INSTALL.md)** 에 정리되어 있습니다.
 
-**빠른 설치**: [Releases](https://github.com/Winni-Lina/nungil/releases/latest)에서 `눈길-v1.0.apk` 다운로드 → 설치 → 실행
+**빠른 설치**: [Releases](https://github.com/Winni-Lina/nungil/releases/latest)에서 `Nungil-v1.0.apk` 다운로드 → 설치 → 실행
 
 ---
 

@@ -8,9 +8,10 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
-BASE = r'C:\Users\User\Desktop\Nungil Main\docs'
-MD = os.path.join(BASE, 'technical_report.md')
-OUT = os.path.join(BASE, '눈길_Technical_Report.docx')
+ROOT = r'C:\Users\User\Desktop\Nungil Main'
+BASE = ROOT  # 이미지 경로(docs/...)는 repo 루트 기준
+MD = os.path.join(ROOT, '기술보고서.md')
+OUT = os.path.join(ROOT, 'docs', '눈길_Technical_Report.docx')
 FONT = '맑은 고딕'
 
 doc = Document()
