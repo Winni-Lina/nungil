@@ -58,8 +58,8 @@ class UserNotificationFragment : Fragment() {
 
         // 마지막 동기화
         val lastSync = AlarmEventLog.getLastSyncMillis(requireContext())
-        tvLastSync.text = if (lastSync == 0L) "마지막 동기화: 없음"
-                          else "마지막 동기화: ${dateFmt.format(Date(lastSync))}"
+        tvLastSync.text = if (lastSync == 0L) "마지막 확인: 없음"
+                          else "마지막 확인: ${dateFmt.format(Date(lastSync))}"
 
         if (events.isEmpty()) {
             tvEmpty.visibility    = View.VISIBLE

@@ -39,7 +39,7 @@
         android:id="@+id/tvLastSync"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="동기화 정보 없음"
+        android:text="확인 정보 없음"
         android:textSize="12sp"
         android:textColor="@color/textSecondary"
         android:paddingHorizontal="16dp"

@@ -92,21 +92,52 @@ class CircularTimelineView @JvmOverloads constructor(
         style       = Paint.Style.STROKE
         alpha       = 140
     }
+    private val nowLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color     = Color.parseColor("#D95F74")
+        textAlign = Paint.Align.CENTER
+        typeface  = Typeface.DEFAULT_BOLD
+    }
     private val blockLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color     = Color.WHITE
         textAlign = Paint.Align.CENTER
         typeface  = Typeface.DEFAULT_BOLD
+    }
+    private val blockIconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
     }
     private val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
         color = Color.parseColor("#EEF2FF")
     }
 
+    // 과업별 비비드 컬러 팔레트
+    private val vividPalette = listOf(
+        Color.parseColor("#1FA2C9"), Color.parseColor("#0E6FB8"), Color.parseColor("#2BB8D6"),
+        Color.parseColor("#E94E5C"), Color.parseColor("#15497A"), Color.parseColor("#3DC1D3"),
+    )
+    private fun colorForTask(taskId: Int) = vividPalette[abs(taskId) % vividPalette.size]
+
+    private fun iconForTask(taskName: String): String = when {
+        taskName.contains("양치") || taskName.contains("세면") -> "🪥"
+        taskName.contains("밥") || taskName.contains("식사") || taskName.contains("끓이") -> "🍚"
+        taskName.contains("빨래") || taskName.contains("세탁") -> "🧺"
+        taskName.contains("청소") -> "🧹"
+        taskName.contains("설거지") -> "🍽"
+        taskName.contains("씻기") || taskName.contains("손") -> "🧼"
+        taskName.contains("옷") -> "👕"
+        taskName.contains("신발") -> "👟"
+        taskName.contains("약") -> "💊"
+        taskName.contains("운동") || taskName.contains("헬스") -> "🏋"
+        taskName.contains("공부") || taskName.contains("학습") -> "📚"
+        taskName.contains("만나") || taskName.contains("약속") -> "🤝"
+        else -> "📋"
+    }
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         cx = w / 2f; cy = h / 2f
         val size = minOf(w, h).toFloat()
-        ringW  = size * 0.095f
-        outerR = size * 0.36f
+        ringW  = size * 0.082f          // 바깥 라벨이 카드 경계에 잘리지 않도록 여백 확보
+        outerR = size * 0.31f
 
         ringBgPaint.strokeWidth  = ringW
         blockPaint.strokeWidth   = ringW * 0.85f
@@ -135,17 +166,16 @@ class CircularTimelineView @JvmOverloads constructor(
     }
 
     private fun drawTicks(canvas: Canvas) {
-        for (h in 0 until 24) {
+        // 6시간 단위 큰 눈금만 표시 (작은 눈금은 시각적으로 복잡해서 제거)
+        for (h in 0 until 24 step 6) {
             val angle   = Math.toRadians(timeToAngle(h, 0).toDouble())
-            val isMajor = (h % 6 == 0)
-            val paint   = if (isMajor) tickBigPaint else tickSmallPaint
-            val tickLen = if (isMajor) ringW * 0.55f else ringW * 0.30f
+            val tickLen = ringW * 0.55f
             val r1 = outerR - tickLen / 2
             val r2 = outerR + tickLen / 2
             canvas.drawLine(
                 (cx + r1 * cos(angle)).toFloat(), (cy + r1 * sin(angle)).toFloat(),
                 (cx + r2 * cos(angle)).toFloat(), (cy + r2 * sin(angle)).toFloat(),
-                paint
+                tickBigPaint
             )
         }
     }
@@ -156,28 +186,24 @@ class CircularTimelineView @JvmOverloads constructor(
             val p = t.split(":")
             val h = p[0].toInt(); val m = p[1].toInt()
 
-            val color = when (s.status) {
-                "completed"   -> Color.parseColor("#88A6D8")
-                "in_progress" -> Color.parseColor("#C98AB7")
-                else          -> Color.parseColor("#E39A8D")
-            }
+            // 완료 상태는 옅게, 그 외엔 과업별 비비드 컬러
+            val baseColor = colorForTask(s.taskId)
+            val color = if (s.status == "completed") {
+                Color.argb(140, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor))
+            } else baseColor
             blockPaint.color = color
 
             val startAngle = timeToAngle(h, m)
-            val sweepAngle = 360f / 24f * 0.85f
+            val sweepAngle = max(360f / 24f * 1.4f, 16f)  // 비비드 웨지가 잘 보이도록 확대
 
             canvas.drawArc(arcOval, startAngle, sweepAngle, false, blockPaint)
 
+            // 웨지 중앙에 아이콘만 표시 (바깥 텍스트 라벨은 카드 경계에 잘려서 제거)
             val midAngle = Math.toRadians((startAngle + sweepAngle / 2).toDouble())
-            val labelR   = outerR + ringW * 0.85f
-            val lx = (cx + labelR * cos(midAngle)).toFloat()
-            val ly = (cy + labelR * sin(midAngle)).toFloat()
-
-            blockLabelPaint.textSize = sp(8f)
-            blockLabelPaint.color    = color
-
-            val name = if (s.taskName.length > 4) s.taskName.take(4) + "…" else s.taskName
-            canvas.drawText(name, lx, ly + blockLabelPaint.textSize / 3, blockLabelPaint)
+            blockIconPaint.textSize = sp(15f)
+            val ix = (cx + outerR * cos(midAngle)).toFloat()
+            val iy = (cy + outerR * sin(midAngle)).toFloat()
+            canvas.drawText(iconForTask(s.taskName), ix, iy + blockIconPaint.textSize / 3, blockIconPaint)
 
         } catch (e: Exception) {
             Log.e("CircularTimelineView", "drawBlock error: scheduleId=${s.scheduleId}", e)
@@ -199,6 +225,13 @@ class CircularTimelineView @JvmOverloads constructor(
         canvas.drawCircle(dotX, dotY, dp(7f), nowDotPaint)
         val glowPaint = Paint(nowDotPaint).apply { alpha = 60; style = Paint.Style.FILL }
         canvas.drawCircle(dotX, dotY, dp(12f), glowPaint)
+
+        // "지금" 라벨 (도트가 뭔지 알 수 있도록)
+        val labelR = outerR + ringW * 0.9f
+        val lx = (cx + labelR * cos(rad)).toFloat()
+        val ly = (cy + labelR * sin(rad)).toFloat()
+        nowLabelPaint.textSize = sp(8f)
+        canvas.drawText("지금", lx, ly + nowLabelPaint.textSize / 3, nowLabelPaint)
     }
 
     private fun drawSelectionDot(canvas: Canvas) {

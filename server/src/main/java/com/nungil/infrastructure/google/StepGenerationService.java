@@ -81,7 +81,30 @@ public class StepGenerationService {
         return parseSteps(raw, taskProcess);
     }
 
-    /** Gemini 응답(JSON 배열 문자열) 파싱. 실패 시 taskProcess fallback. */
+    /** taskProcess가 JSON 배열이면 파싱, 아니면 줄바꿈 분리 */
+	public List<String> fallbackSteps(String taskProcess) {
+	    List<String> result = new ArrayList<>();
+	    if (taskProcess == null || taskProcess.isBlank()) return result;
+	    String s = taskProcess.trim();
+	    try {
+	        JsonNode arr = objectMapper.readTree(s);
+	        if (arr.isArray()) {
+	            for (JsonNode n : arr) {
+	                String v = n.asText().trim();
+	                if (!v.isEmpty()) result.add(v);
+	            }
+	            if (!result.isEmpty()) return result;
+	        }
+	    } catch (Exception ignored) { }
+	
+	    for (String line : s.split("\\r?\\n")) {
+	        String v = line.trim().replaceAll("^\\d+[.)]\\s*", "");
+	        if (!v.isEmpty()) result.add(v);
+	    }
+	    return result;
+	}
+
+	/** Gemini 응답(JSON 배열 문자열) 파싱. 실패 시 taskProcess fallback. */
     private List<String> parseSteps(String raw, String fallback) {
         List<String> result = new ArrayList<>();
         if (raw == null) raw = "";
@@ -102,28 +125,5 @@ public class StepGenerationService {
 
         // 2) fallback: taskProcess 파싱 (JSON 배열 또는 줄바꿈)
         return fallbackSteps(fallback);
-    }
-
-    /** taskProcess가 JSON 배열이면 파싱, 아니면 줄바꿈 분리 */
-    public List<String> fallbackSteps(String taskProcess) {
-        List<String> result = new ArrayList<>();
-        if (taskProcess == null || taskProcess.isBlank()) return result;
-        String s = taskProcess.trim();
-        try {
-            JsonNode arr = objectMapper.readTree(s);
-            if (arr.isArray()) {
-                for (JsonNode n : arr) {
-                    String v = n.asText().trim();
-                    if (!v.isEmpty()) result.add(v);
-                }
-                if (!result.isEmpty()) return result;
-            }
-        } catch (Exception ignored) { }
-
-        for (String line : s.split("\\r?\\n")) {
-            String v = line.trim().replaceAll("^\\d+[.)]\\s*", "");
-            if (!v.isEmpty()) result.add(v);
-        }
-        return result;
     }
 }

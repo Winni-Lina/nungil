@@ -83,7 +83,6 @@
         FROM SCHEDULE s
         LEFT JOIN TASK t ON s.task_id = t.task_id
         WHERE s.id = #{id} AND s.idx = #{idx}
-          AND s.status = 'pending'
           AND s.scheduled_at >= TRUNC(SYSDATE)
         ORDER BY s.scheduled_at ASC
     </select>

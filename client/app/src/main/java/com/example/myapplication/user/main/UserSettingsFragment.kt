@@ -37,13 +37,13 @@ class UserSettingsFragment : Fragment() {
         view.findViewById<View>(R.id.layoutSync).setOnClickListener {
             val userId  = prefs.getString("user_id", null) ?: return@setOnClickListener
             val userIdx = prefs.getInt("user_idx", -1).takeIf { it >= 0 } ?: return@setOnClickListener
-            Toast.makeText(requireContext(), "동기화 중...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "확인하고 있어요...", Toast.LENGTH_SHORT).show()
             Thread {
                 ScheduleManager(requireContext()).syncSchedulesFromDB(userId, userIdx)
                 AlarmEventLog.saveLastSync(requireContext())
                 requireActivity().runOnUiThread {
                     refreshLastSync(tvLastSync)
-                    Toast.makeText(requireContext(), "동기화 완료!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), "알람을 다시 맞췄어요!", Toast.LENGTH_SHORT).show()
                 }
             }.start()
         }
@@ -67,7 +67,7 @@ class UserSettingsFragment : Fragment() {
 
     private fun refreshLastSync(tv: TextView) {
         val last = AlarmEventLog.getLastSyncMillis(requireContext())
-        tv.text = if (last == 0L) "마지막 동기화: 없음"
-                  else "마지막 동기화: ${dateFmt.format(Date(last))}"
+        tv.text = if (last == 0L) "마지막 확인: 없음"
+                  else "마지막 확인: ${dateFmt.format(Date(last))}"
     }
 }

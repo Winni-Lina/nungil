@@ -1,6 +1,7 @@
 package com.example.myapplication.guardian.schedule.ui
 
 import android.app.DatePickerDialog
+import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -14,8 +15,6 @@ import com.example.myapplication.guardian.schedule.data.ScheduleRepository
 import com.example.myapplication.model.Task
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.timepicker.MaterialTimePicker
-import com.google.android.material.timepicker.TimeFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -130,19 +129,49 @@ class ScheduleAddActivity : AppCompatActivity() {
     }
 
     private fun showTimePicker() {
-        val picker = MaterialTimePicker.Builder()
-            .setTimeFormat(TimeFormat.CLOCK_12H)            // 오전/오후 표시
-            .setInputMode(MaterialTimePicker.INPUT_MODE_CLOCK) // 시계판으로 시작(키보드 토글 가능)
-            .setHour(selectedHour)
-            .setMinute(selectedMinute)
-            .setTitleText("시간 선택")
-            .build()
-        picker.addOnPositiveButtonClickListener {
-            selectedHour   = picker.hour    // 0~23 (24h 기준 저장)
-            selectedMinute = picker.minute
-            refreshDateTimeDisplay()
+        val view = layoutInflater.inflate(R.layout.dialog_time_picker, null)
+        val pickerAmPm   = view.findViewById<NumberPicker>(R.id.pickerAmPm)
+        val pickerHour   = view.findViewById<NumberPicker>(R.id.pickerHour)
+        val pickerMinute = view.findViewById<NumberPicker>(R.id.pickerMinute)
+
+        pickerAmPm.minValue = 0
+        pickerAmPm.maxValue = 1
+        pickerAmPm.displayedValues = arrayOf("오전", "오후")
+
+        pickerHour.minValue = 1
+        pickerHour.maxValue = 12
+
+        pickerMinute.minValue = 0
+        pickerMinute.maxValue = 59
+        pickerMinute.setFormatter { "%02d".format(it) }
+
+        val isPm = selectedHour >= 12
+        pickerAmPm.value = if (isPm) 1 else 0
+        pickerHour.value = when {
+            selectedHour == 0 -> 12
+            selectedHour > 12 -> selectedHour - 12
+            else              -> selectedHour
         }
-        picker.show(supportFragmentManager, "time_picker")
+        pickerMinute.value = selectedMinute
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(view)
+            .create()
+
+        view.findViewById<View>(R.id.btnCancelTime).setOnClickListener { dialog.dismiss() }
+        view.findViewById<View>(R.id.btnConfirmTime).setOnClickListener {
+            val pm  = pickerAmPm.value == 1
+            val h12 = pickerHour.value
+            selectedHour = when {
+                !pm && h12 == 12 -> 0
+                pm && h12 != 12  -> h12 + 12
+                else             -> h12
+            }
+            selectedMinute = pickerMinute.value
+            refreshDateTimeDisplay()
+            dialog.dismiss()
+        }
+        dialog.show()
     }
 
     private val locationOptions = arrayOf("세탁실", "부엌", "거실", "화장실", "방", "기타")
@@ -174,10 +203,21 @@ class ScheduleAddActivity : AppCompatActivity() {
             when (result) {
                 is ApiResult.Success -> runOnUiThread {
                     taskList.addAll(result.data)
-                    spinnerTask.adapter = ArrayAdapter(
+                    spinnerTask.adapter = object : ArrayAdapter<String>(
                         this, android.R.layout.simple_spinner_item,
                         taskList.map { it.taskName }
-                    ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+                    ) {
+                        override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                            val v = super.getView(position, convertView, parent)
+                            (v as? TextView)?.setTextColor(Color.BLACK)
+                            return v
+                        }
+                        override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                            val v = super.getDropDownView(position, convertView, parent)
+                            (v as? TextView)?.setTextColor(Color.BLACK)
+                            return v
+                        }
+                    }.also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
                     spinnerTask.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                         override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
@@ -286,6 +326,8 @@ class ScheduleAddActivity : AppCompatActivity() {
         val et = EditText(this).apply {
             setText(initial)
             textSize = 13f
+            setTextColor(Color.BLACK)
+            setHintTextColor(Color.GRAY)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
         val btnDelete = ImageButton(this).apply {
@@ -321,13 +363,17 @@ class ScheduleAddActivity : AppCompatActivity() {
                 Toast.makeText(this, "과업을 선택해주세요.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+            val steps = collectSteps()
+            if (steps.isEmpty()) {
+                Toast.makeText(this, "AI 맞춤 단계를 설정하세요!", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             val timeStr   = "%02d:%02d".format(selectedHour, selectedMinute)
             val location  = etLocation.text?.toString()?.trim() ?: ""
             val note      = etNote.text?.toString()?.trim() ?: ""
             val taskName  = taskList.firstOrNull { it.taskId == selectedTaskId }?.taskName ?: "과업"
             val locationLabel = if (location.isEmpty()) "장소 미지정" else location
-            val steps     = collectSteps()
-            val stepInfo  = if (steps.isEmpty()) "단계 없음" else "${steps.size}단계"
+            val stepInfo  = "${steps.size}단계"
 
             AlertDialog.Builder(this)
                 .setTitle("일정 저장 확인")

@@ -189,6 +189,10 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         btnMic = findViewById(R.id.btnNext)
         ivBear = findViewById(R.id.ivBear)
 
+        findViewById<View>(R.id.btnTodaySchedule).setOnClickListener {
+            startActivity(Intent(this, com.example.myapplication.user.main.UserMainActivity::class.java))
+        }
+
         adapter = ChatAdapter(chatList, this)
         rvChat.layoutManager = LinearLayoutManager(this)
         rvChat.adapter = adapter
