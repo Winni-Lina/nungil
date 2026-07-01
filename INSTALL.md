@@ -8,7 +8,7 @@
 
 데모 서버가 켜져 있는 경우, APK 하나만 설치하면 바로 실행됩니다.
 
-1. [Releases 페이지](https://github.com/Winni-Lina/nungil/releases)에서 `눈길-v1.0.apk` 다운로드
+1. [Releases 페이지](https://github.com/Winni-Lina/nungil/releases)에서 `Nungil-v1.0.apk` 다운로드
 2. 안드로이드 폰 → **설정 > 보안 > 출처를 알 수 없는 앱 허용** 체크
 3. 다운로드한 APK 파일 터치 → 설치
 4. 앱 실행 → 보호자 회원가입 또는 사용자 QR 스캔으로 시작
@@ -72,36 +72,36 @@
    ```sql
    CREATE USER nungil IDENTIFIED BY your_password;
    GRANT CONNECT, RESOURCE TO nungil;
+   GRANT UNLIMITED TABLESPACE TO nungil;   -- 테이블 생성 권한
    ```
-3. `server/src/main/resources/` 의 SQL 파일 순서대로 실행:
+3. `nungil` 유저로 접속해 `server/src/main/resources/` 의 SQL을 순서대로 실행:
+   ```sql
+   @schema.sql       -- ① 테이블 4개 생성 (TASK, GUARDIAN, NUNGIL_USER, SCHEDULE)
+   @seed_data.sql    -- ② 시연용 기본 데이터(과업 8건 + 데모 계정·일정)
+   COMMIT;
    ```
-   check_data.sql → run_seed.sql
-   ```
+   (선택) `@check_data.sql` 로 입력 결과를 확인할 수 있습니다.
+
+> **데모 계정**: seed 실행 시 보호자 `demo` / 비번 `1234` 계정과 사용자·일정이 함께 들어갑니다.
 
 ---
 
 ### Step 4 — 서버 설정 및 실행
 
-1. `server/src/main/resources/application.properties` 파일 생성:
-
-```properties
-# DB 연결
-db.driver=oracle.jdbc.OracleDriver
-db.url=jdbc:oracle:thin:@localhost:1521/orcl
-db.username=nungil
-db.password=YOUR_DB_PASSWORD
-
-# Google 서비스 계정 (Gemini + STT 공용)
-google.service-account-key=classpath:serviceAccountKey.json
-google.vertex.project-id=YOUR_GCP_PROJECT_ID
-google.vertex.location=us-central1
-
-# Firebase (서비스 계정 키 경로)
-google.firebase.service-account-key=classpath:firebase/serviceAccountKey.json
-```
-
-2. Eclipse에서 `server/` 프로젝트 열기 → Tomcat 서버에 추가 → **Start**
-3. 서버 확인:
+1. 설정 템플릿을 복사해 `application.properties` 를 만듭니다:
+   ```
+   cd server/src/main/resources
+   cp application.properties.example application.properties
+   ```
+2. `application.properties` 를 열어 값(`YOUR_...`)을 본인 환경에 맞게 채웁니다:
+   ```properties
+   db.password=YOUR_DB_PASSWORD              # Step 3에서 만든 DB 비번
+   google.vertex.project-id=YOUR_GCP_PROJECT_ID   # Step 1의 GCP 프로젝트 ID
+   ```
+   - Google 서비스 계정 키(`serviceAccountKey.json`)는 Step 1에서 저장한 파일을 사용합니다.
+   - Firebase 키는 프로퍼티가 아니라 Step 2의 파일(`firebase/serviceAccountKey.json`)로 배치됩니다.
+3. Eclipse에서 `server/` 프로젝트 열기 → Tomcat 서버에 추가 → **Start**
+4. 서버 확인:
    ```
    http://localhost:8080/nungil-server/
    ```
