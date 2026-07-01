@@ -32,6 +32,7 @@
 | Google Cloud 계정 | Gemini API, STT API |
 | Firebase 프로젝트 | FCM 푸시 알림 |
 | ngrok | 로컬 서버를 외부에서 접근 가능하게 터널링 |
+| Vosk 한국어 모델 | 웨이크워드("똘똘아") 오프라인 인식 — 용량(약 250MB)이 커서 저장소에 포함되지 않음. Step 6에서 별도 다운로드 |
 
 ---
 
@@ -130,9 +131,16 @@
 
 1. Android Studio에서 `client/` 폴더 열기
 2. `client/app/google-services.json` 이 있는지 확인 (Step 2에서 저장한 파일)
-3. 안드로이드 기기 USB 연결 또는 에뮬레이터 실행
-4. Android Studio 상단 **Run ▶** 버튼 클릭
-5. 또는 APK 직접 빌드:
+3. **Vosk 한국어 모델 배치** (웨이크워드 인식용, 저장소에 미포함):
+   - [alphacephei.com/vosk/models](https://alphacephei.com/vosk/models) 에서 `vosk-model-small-ko` 다운로드
+   - 압축을 풀어 내용물(`am/`, `graph/`, `conf/`, `ivector/` 등)을 아래 경로에 넣습니다:
+     ```
+     client/app/src/main/assets/model-ko/
+     ```
+   - 이 폴더가 없으면 앱은 실행되지만 "똘똘아" 웨이크워드만 동작하지 않습니다.
+4. 안드로이드 기기 USB 연결 또는 에뮬레이터 실행
+5. Android Studio 상단 **Run ▶** 버튼 클릭
+6. 또는 APK 직접 빌드:
    ```
    cd client
    ./gradlew assembleDebug

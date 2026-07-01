@@ -17,7 +17,7 @@ AI 어시스턴트 **똘똘이**가 일상 과업을 한 단계씩 음성으로 
 ![STT](https://img.shields.io/badge/Voice-Google%20STT-34A853?logo=google&logoColor=white)
 ![Tests](https://img.shields.io/badge/Tests-28%20passing-success)
 
-**[📱 APK 다운로드](https://github.com/Winni-Lina/nungil/releases/latest)** · **[📖 실행 가이드](INSTALL.md)** · **[📄 기술 보고서](기술보고서.md)** · **[📊 발표자료](발표자료/눈길_발표자료.pdf)**
+**[📱 APK 다운로드](https://github.com/Winni-Lina/nungil/releases/latest)** · **[📖 실행 가이드](INSTALL.md)** · **[📄 기술 보고서](기술보고서.md)** · **[📊 발표자료](발표자료/눈길_발표자료.pdf)** · **[📝 논문](논문/눈길_논문.docx)**
 
 </div>
 
@@ -231,6 +231,6 @@ APK 한 번에 설치하거나, 소스에서 직접 빌드하는 방법 모두 *
 
 <div align="center">
 
-**눈길 팀** · 한이음 ICT 멘토링 클럽 · 2026
+**눈길 팀** · 한국폴리텍대학 성남캠퍼스 · 한이음 드림업 · 2026
 
 </div>
