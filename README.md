@@ -17,7 +17,7 @@ AI 어시스턴트 **똘똘이**가 일상 과업을 한 단계씩 음성으로 
 ![STT](https://img.shields.io/badge/Voice-Google%20STT-34A853?logo=google&logoColor=white)
 ![Tests](https://img.shields.io/badge/Tests-28%20passing-success)
 
-**[📱 APK 다운로드](https://github.com/Winni-Lina/nungil/releases/latest)** · **[📖 실행 가이드](INSTALL.md)** · **[📄 기술 보고서](기술보고서.md)**
+**[📱 APK 다운로드](https://github.com/Winni-Lina/nungil/releases/latest)** · **[📖 실행 가이드](INSTALL.md)** · **[📄 기술 보고서](기술보고서.md)** · **[📊 발표자료](발표자료/눈길_발표자료.pdf)**
 
 </div>
 
