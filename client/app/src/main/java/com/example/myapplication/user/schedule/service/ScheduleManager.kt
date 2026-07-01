@@ -82,8 +82,11 @@ class ScheduleManager(private val context: Context) {
         val registeredIds = mutableSetOf<String>()
         schedules.forEach { item ->
             val diff = item.triggerTimeMillis - now
-            android.util.Log.d("AlarmDebug", "scheduleId=${item.scheduleId} title=${item.title} diff=${diff}ms")
-            if (diff > 0) {
+            android.util.Log.d("AlarmDebug", "scheduleId=${item.scheduleId} title=${item.title} status=${item.status} diff=${diff}ms")
+            if (item.status == "completed") {
+                alarmManager.cancel(makePendingIntent(item.scheduleId.toString(), ""))
+                android.util.Log.d("AlarmDebug", "→ 이미 완료된 일정, 알람 취소")
+            } else if (diff > 0) {
                 setAlarm(item.scheduleId.toString(), item.title, item.triggerTimeMillis)
                 registeredIds.add(item.scheduleId.toString())
             } else {

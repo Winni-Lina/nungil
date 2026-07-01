@@ -77,4 +77,23 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <TextView
+        android:id="@+id/btnTodaySchedule"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="8dp"
+        android:text="📅 오늘 일정"
+        android:textSize="13sp"
+        android:textColor="#1E88E5"
+        android:textStyle="bold"
+        android:background="@drawable/bg_input_dark"
+        android:elevation="6dp"
+        android:clickable="true"
+        android:focusable="true"
+        app:layout_constraintTop_toTopOf="@+id/bottomBarBg"
+        app:layout_constraintBottom_toBottomOf="@+id/bottomBarBg"
+        app:layout_constraintStart_toStartOf="parent" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

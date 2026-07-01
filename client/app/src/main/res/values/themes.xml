@@ -12,4 +12,10 @@
     </style>
 
     <style name="Theme.MyApplication" parent="Base.Theme.MyApplication" />
+
+    <!-- 다크 배경 다이얼로그 위 NumberPicker 숫자가 보이도록 밝은 텍스트색 강제 -->
+    <style name="NumberPickerLight" parent="Theme.Material3.Light.NoActionBar">
+        <item name="android:textColorPrimary">#FFFFFF</item>
+        <item name="colorControlNormal">#FFFFFF</item>
+    </style>
 </resources>

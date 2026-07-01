@@ -27,7 +27,8 @@ object ScheduleRepository {
         val steps: List<String>,
         val triggerTimeMillis: Long,
         val location: String,
-        val scheduleNote: String
+        val scheduleNote: String,
+        val status: String = "pending"
     )
 
     data class UserInfo(
@@ -93,7 +94,8 @@ object ScheduleRepository {
                     steps             = parseSteps(obj),
                     triggerTimeMillis = DateParseUtil.parseScheduledAtMillis(obj),
                     location          = obj.optString("location", ""),
-                    scheduleNote      = obj.optString("specialNote", "")
+                    scheduleNote      = obj.optString("specialNote", ""),
+                    status            = obj.optString("status", "pending")
                 )
             }
         } catch (e: Exception) {

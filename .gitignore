@@ -67,3 +67,9 @@
 
 
 /Servers
+# 시드 스크립트(DB 비번 포함) — 커밋 금지
+seed_runner.py
+**/seed_runner.py
+
+# MS Office 임시 잠금파일
+~$*

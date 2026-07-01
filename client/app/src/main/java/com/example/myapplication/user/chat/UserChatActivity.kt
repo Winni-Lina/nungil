@@ -189,6 +189,10 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         btnMic = findViewById(R.id.btnNext)
         ivBear = findViewById(R.id.ivBear)
 
+        findViewById<View>(R.id.btnTodaySchedule).setOnClickListener {
+            startActivity(Intent(this, com.example.myapplication.user.main.UserMainActivity::class.java))
+        }
+
         adapter = ChatAdapter(chatList, this)
         rvChat.layoutManager = LinearLayoutManager(this)
         rvChat.adapter = adapter
@@ -370,18 +374,15 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
                 val stepComplete = result.optBoolean("stepComplete", false)
 
-                // 일정 모드: stepComplete=true일 때만 "다음 단계로" 버튼 표시
-                if (isScheduleMode) {
-                    if (stepComplete) {
-                        val nextLabel = if (scheduleSteps.isNotEmpty() && currentStepIndex + 1 < scheduleSteps.size) "다음 단계로" else "완료"
-                        suggests.add(0, nextLabel)
-                    }
-                }
-
                 if (currentScheduleId > 0) ScheduleRepository.logQuestion(currentScheduleId.toLong())
 
                 addMsg(answer, UserChatMessage.TYPE_OTHER, false, null, suggests)
                 ttsManager.speak(answer)
+
+                // 단계 완료 판단은 서버 stepComplete 단일 소유 → 칭찬을 들려준 뒤 자동으로 다음 단계 진행
+                if (isScheduleMode && stepComplete) {
+                    mainHandler.postDelayed({ proceedToNextStep() }, 1200)
+                }
                 Log.d("ServerCheck", "파싱 및 화면 업데이트 성공")
             } else {
                 Log.e("ServerCheck", "서버 status가 SUCCESS가 아님: ${root.optString("status")}")
@@ -492,29 +493,10 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     }
 
     private fun handleScheduleVoiceResult(text: String) {
-        val trimmed = text.trim()
-        // 짧은 단어는 정확히 일치해야 완료로 인정 (contains면 "모르겠어"가 "어"에 걸림)
-        val exactKeywords = setOf("응", "어", "네", "끝", "완료")
-        // 긴 표현은 포함 여부로 판단
-        val containsKeywords = listOf("했어", "다 했어", "됐어", "했어요", "다했어", "했습니다", "다 했어요", "끝났어", "끝냈어")
-        val retryKeywords = listOf("아니", "안 했어", "못 했어", "안했어", "못했어", "아직", "모르겠")
-
-        val isComplete = exactKeywords.contains(trimmed) || containsKeywords.any { trimmed.contains(it) }
-        val isRetry = retryKeywords.any { trimmed.contains(it) }
-
-        when {
-            isComplete -> {
-                mainHandler.postDelayed({ proceedToNextStep() }, 500)
-            }
-            isRetry -> {
-                // 못 했다 / 모르겠다 → AI에게 전달해서 도움받기
-                uploadToServer(null, null, trimmed)
-            }
-            else -> {
-                // 질문이나 관련 없는 말 → AI에게 전달(안내/답변만 받음)
-                uploadToServer(null, null, trimmed)
-            }
-        }
+        // 완료 판단은 서버(AI)가 단일 소유 — 클라 키워드 자동완료 제거.
+        // 모든 발화를 서버로 보내고, 응답 stepComplete=true면 자동으로 다음 단계 진행한다.
+        // (기존 키워드 매칭은 "다 했는데 이거 맞아?" 같은 질문을 완료로 오인하는 문제가 있었음)
+        uploadToServer(null, null, text.trim())
     }
 
     private fun openBackCamera() {

@@ -1,6 +1,5 @@
 package com.example.myapplication.guardian.settings
 
-import android.app.TimePickerDialog
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -20,6 +19,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.myapplication.R
 import com.example.myapplication.core.network.ApiClient
+import com.google.android.material.timepicker.MaterialTimePicker
+import com.google.android.material.timepicker.TimeFormat
 import com.example.myapplication.core.network.ApiResult
 import com.example.myapplication.core.network.Session
 import com.example.myapplication.guardian.onboarding.LoginActivity
@@ -265,13 +266,28 @@ class SettingsFragment : Fragment() {
     }
 
     private fun showDndTimePicker() {
-        TimePickerDialog(requireContext(), { _, startH, _ ->
-            Session.dndStart = startH
-            TimePickerDialog(requireContext(), { _, endH, _ ->
-                Session.dndEnd = endH
+        // 시작 시간 → 종료 시간 순차 선택 (시 단위, 분은 00 고정)
+        val startPicker = MaterialTimePicker.Builder()
+            .setTimeFormat(TimeFormat.CLOCK_12H)
+            .setHour(Session.dndStart)
+            .setMinute(0)
+            .setTitleText("방해 금지 시작 시간")
+            .build()
+        startPicker.addOnPositiveButtonClickListener {
+            Session.dndStart = startPicker.hour
+            val endPicker = MaterialTimePicker.Builder()
+                .setTimeFormat(TimeFormat.CLOCK_12H)
+                .setHour(Session.dndEnd)
+                .setMinute(0)
+                .setTitleText("방해 금지 종료 시간")
+                .build()
+            endPicker.addOnPositiveButtonClickListener {
+                Session.dndEnd = endPicker.hour
                 view?.findViewById<TextView>(R.id.tvDndTime)?.text = formatDndTime()
-            }, Session.dndEnd, 0, true).show()
-        }, Session.dndStart, 0, true).show()
+            }
+            endPicker.show(childFragmentManager, "dnd_end")
+        }
+        startPicker.show(childFragmentManager, "dnd_start")
     }
 
     private fun formatDndTime() = "%02d:00 ~ %02d:00".format(Session.dndStart, Session.dndEnd)

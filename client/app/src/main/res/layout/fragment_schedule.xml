@@ -120,17 +120,13 @@
                         android:gravity="center"
                         android:paddingBottom="14dp">
 
-                        <View android:layout_width="10dp" android:layout_height="10dp" android:background="#E39A8D"/>
+                        <View android:layout_width="10dp" android:layout_height="10dp" android:background="#1FA2C9"/>
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:text=" 예정   " android:textSize="11sp" android:textColor="#7D8AAD"/>
+                            android:text=" 과업별 색상   " android:textSize="11sp" android:textColor="#7D8AAD"/>
 
-                        <View android:layout_width="10dp" android:layout_height="10dp" android:background="#C98AB7"/>
+                        <View android:layout_width="10dp" android:layout_height="10dp" android:background="#A0C9D9"/>
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:text=" 진행중   " android:textSize="11sp" android:textColor="#7D8AAD"/>
-
-                        <View android:layout_width="10dp" android:layout_height="10dp" android:background="#88A6D8"/>
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:text=" 완료   " android:textSize="11sp" android:textColor="#7D8AAD"/>
+                            android:text=" 완료(연하게)   " android:textSize="11sp" android:textColor="#7D8AAD"/>
 
                         <View android:layout_width="10dp" android:layout_height="10dp" android:background="#D95F74"/>
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"

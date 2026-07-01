@@ -1,13 +1,13 @@
 package com.example.myapplication.guardian.schedule.ui
 
 import android.app.DatePickerDialog
-import android.app.TimePickerDialog
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
+import android.widget.NumberPicker
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -156,8 +156,8 @@ class ScheduleFragment : Fragment() {
 
         // 목록용 필터 적용
         val filtered = when (currentFilter) {
-            "pending"   -> daySchedules.filter { it.status == "pending" }
-            "completed" -> daySchedules.filter { it.status == "completed" || it.status == "in_progress" }
+            "pending"   -> daySchedules.filter { it.status == "pending" || it.status == "in_progress" }
+            "completed" -> daySchedules.filter { it.status == "completed" }
             else        -> daySchedules
         }
 
@@ -213,18 +213,64 @@ class ScheduleFragment : Fragment() {
                 val cal = Calendar.getInstance()
                 DatePickerDialog(requireContext(), { _, y, m, d ->
                     editDate = "%04d-%02d-%02d".format(y, m + 1, d)
-                    TimePickerDialog(requireContext(), { _, h, min ->
+                    pickTime(editHour, editMinute) { h, min ->
                         viewModel.updateScheduleTime(schedule.scheduleId, editDate, "%02d:%02d".format(h, min))
-                    }, editHour, editMinute, true).show()
+                    }
                 }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
             }
             .setPositiveButton("시간만 변경") { _, _ ->
-                TimePickerDialog(requireContext(), { _, h, min ->
+                pickTime(editHour, editMinute) { h, min ->
                     viewModel.updateScheduleTime(schedule.scheduleId, editDate, "%02d:%02d".format(h, min))
-                }, editHour, editMinute, true).show()
+                }
             }
             .setNegativeButton("닫기", null)
             .show()
+    }
+
+    /** 오전/오후 + 시 + 분 휠 선택기. hour는 0~23로 콜백 */
+    private fun pickTime(initialHour: Int, initialMinute: Int, onPicked: (Int, Int) -> Unit) {
+        val view = layoutInflater.inflate(R.layout.dialog_time_picker, null)
+        val pickerAmPm   = view.findViewById<NumberPicker>(R.id.pickerAmPm)
+        val pickerHour   = view.findViewById<NumberPicker>(R.id.pickerHour)
+        val pickerMinute = view.findViewById<NumberPicker>(R.id.pickerMinute)
+
+        pickerAmPm.minValue = 0
+        pickerAmPm.maxValue = 1
+        pickerAmPm.displayedValues = arrayOf("오전", "오후")
+
+        pickerHour.minValue = 1
+        pickerHour.maxValue = 12
+
+        pickerMinute.minValue = 0
+        pickerMinute.maxValue = 59
+        pickerMinute.setFormatter { "%02d".format(it) }
+
+        val isPm = initialHour >= 12
+        pickerAmPm.value = if (isPm) 1 else 0
+        pickerHour.value = when {
+            initialHour == 0 -> 12
+            initialHour > 12 -> initialHour - 12
+            else             -> initialHour
+        }
+        pickerMinute.value = initialMinute
+
+        val dialog = AlertDialog.Builder(requireContext())
+            .setView(view)
+            .create()
+
+        view.findViewById<View>(R.id.btnCancelTime).setOnClickListener { dialog.dismiss() }
+        view.findViewById<View>(R.id.btnConfirmTime).setOnClickListener {
+            val pm  = pickerAmPm.value == 1
+            val h12 = pickerHour.value
+            val hour24 = when {
+                !pm && h12 == 12 -> 0
+                pm && h12 != 12  -> h12 + 12
+                else             -> h12
+            }
+            onPicked(hour24, pickerMinute.value)
+            dialog.dismiss()
+        }
+        dialog.show()
     }
 
     override fun onResume() {

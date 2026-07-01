@@ -18,6 +18,10 @@ class UserMainActivity : AppCompatActivity() {
         val viewPager = findViewById<ViewPager2>(R.id.viewPager)
         val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
 
+        findViewById<android.widget.TextView>(R.id.btnBackToChat).setOnClickListener {
+            finish()
+        }
+
         viewPager.adapter = object : FragmentStateAdapter(this) {
             override fun getItemCount() = 3
             override fun createFragment(position: Int): Fragment = when (position) {

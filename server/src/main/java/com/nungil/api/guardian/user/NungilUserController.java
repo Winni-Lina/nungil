@@ -117,16 +117,21 @@ public class NungilUserController {
                         + "목록: " + taskListStr;
 
                 System.out.println("[Gemini] 요청 중...");
-                String geminiAnswer = geminiRestAdapter.sendRequest(prompt, null, null);
+                // 평문 응답(과업명 또는 "없음")을 받는다. CHAT_SCHEMA(JSON) 강제하면 객체가 와서 매칭이 깨짐.
+                String geminiAnswer = geminiRestAdapter.generateText(null, prompt);
                 System.out.println("[Gemini] 응답: " + geminiAnswer);
 
                 if (geminiAnswer != null && !geminiAnswer.isBlank()) {
-                    String matched = geminiAnswer.trim();
+                    final String matched = geminiAnswer.trim();
                     if (!matched.equals("없음")) {
+                        // 모델이 목록 이름을 그대로 반환하므로 정확 일치 우선, 없으면 포함으로 보조 매칭
                         matchedTask = allTasks.stream()
-                                .filter(t -> matched.contains(t.getName()))
+                                .filter(t -> matched.equals(t.getName()))
                                 .findFirst()
-                                .orElse(null);
+                                .orElseGet(() -> allTasks.stream()
+                                        .filter(t -> matched.contains(t.getName()))
+                                        .findFirst()
+                                        .orElse(null));
                     }
                 }
             }

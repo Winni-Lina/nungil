@@ -15,7 +15,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="알람 동기화"
+            android:text="알람이 안 울려요"
             android:textSize="13sp"
             android:textColor="@color/textSecondary"
             android:paddingBottom="8dp"/>
@@ -46,7 +46,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="🔄  지금 동기화"
+                        android:text="🔄  알람이 안 울리면 눌러요"
                         android:textSize="15sp"
                         android:textColor="@color/textPrimary"/>
 
@@ -63,7 +63,7 @@
                     android:id="@+id/tvLastSyncSettings"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="마지막 동기화: 없음"
+                    android:text="마지막 확인: 없음"
                     android:textSize="12sp"
                     android:textColor="@color/textSecondary"
                     android:padding="16dp"/>

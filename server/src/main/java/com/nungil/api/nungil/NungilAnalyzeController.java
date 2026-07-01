@@ -96,9 +96,14 @@ public class NungilAnalyzeController {
                     + (historyJson.isBlank() ? "(기록 없음)" : historyJson) + "\n\n"
                     + "위 일정을 다 마쳤어. 칭찬과 함께 짧게 요약해줘.";
 
-            String message = geminiAdapter.generateSteps(system, user);
+            String message = geminiAdapter.generateText(system, user);
             if (message != null) {
+                // 혹시 모델이 펜스/대괄호를 붙였을 때 방어
                 message = message.replaceAll("(?s)```json|```", "").trim();
+                if (message.startsWith("[") && message.endsWith("]")) {
+                    message = message.substring(1, message.length() - 1)
+                            .replaceAll("^\\s*\"|\"\\s*$", "").trim();
+                }
             }
             if (message == null || message.isBlank()) {
                 message = scheduleTitle + " 다 했어요! 정말 잘했어요!";

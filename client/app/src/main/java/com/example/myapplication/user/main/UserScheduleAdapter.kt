@@ -45,12 +45,10 @@ class UserScheduleAdapter(
         holder.tvLocation.text = item.location.ifBlank { "" }
         holder.tvLocation.visibility = if (item.location.isBlank()) View.GONE else View.VISIBLE
 
-        val now = System.currentTimeMillis()
-        val isPast = item.triggerTimeMillis < now
         val statusText: String
         val statusColor: Int
 
-        if (isPast) {
+        if (item.status == "completed") {
             statusText  = "완료"
             statusColor = ContextCompat.getColor(holder.itemView.context, R.color.statusCompleted)
             holder.btnStart.visibility = View.GONE
