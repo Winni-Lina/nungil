@@ -350,15 +350,12 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
             val root = JSONObject(json)
             if (root.optString("status") == "SUCCESS") {
                 val result = root.getJSONObject("result")
-                shouldLaunchCamera = result.optBoolean("photoRequest", false)
+                val photoRequest = result.optBoolean("photoRequest", false)
+                shouldLaunchCamera = photoRequest
 
-                // transcribedText는 화면 표시만 (히스토리 추가는 uploadToServer에서 이미 처리됨 → 중복 방지)
                 val transcribed = result.optString("transcribedText", "")
-                if (transcribed.isNotEmpty()) {
-                    updateVoiceStatus(transcribed)
-                }
+                if (transcribed.isNotEmpty()) updateVoiceStatus(transcribed)
 
-                // answer 세척: 서버 1차 방어에 더해, 펜스/이중 JSON이 남아있을 경우 한 번 더 정리
                 var answer = result.optString("answer", "")
                     .replace("```json", "").replace("```", "").trim()
                 if (answer.startsWith("{") && answer.contains("\"answer\"")) {
@@ -372,26 +369,58 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     for (i in 0 until suggestArray.length()) suggests.add(suggestArray.getString(i))
                 }
 
+                val intent = result.optString("intent", "OTHER")
                 val stepComplete = result.optBoolean("stepComplete", false)
 
-                if (currentScheduleId > 0) ScheduleRepository.logQuestion(currentScheduleId.toLong())
+                // 질문 횟수: 실제 질문·도움 요청·사진 요청만 카운트 (완료 선언·잡담 제외)
+                val shouldLogQuestion = isScheduleMode && currentScheduleId > 0 &&
+                    (intent == "STEP_QUESTION" || intent == "HELP_REQUEST" || photoRequest)
+                if (shouldLogQuestion) ScheduleRepository.logQuestion(currentScheduleId.toLong())
 
                 addMsg(answer, UserChatMessage.TYPE_OTHER, false, null, suggests)
                 ttsManager.speak(answer)
 
-                // 단계 완료 판단은 서버 stepComplete 단일 소유 → 칭찬을 들려준 뒤 자동으로 다음 단계 진행
-                if (isScheduleMode && stepComplete) {
-                    mainHandler.postDelayed({ proceedToNextStep() }, 1200)
+                // 완료 선언이면 자동 이동 대신 재확인 다이얼로그 표시
+                if (isScheduleMode && (intent == "STEP_DONE" || stepComplete)) {
+                    mainHandler.postDelayed({ showStepConfirmDialog() }, 1400)
                 }
-                Log.d("ServerCheck", "파싱 및 화면 업데이트 성공")
+                Log.d("ServerCheck", "파싱 완료 | intent=$intent stepComplete=$stepComplete")
             } else {
-                Log.e("ServerCheck", "서버 status가 SUCCESS가 아님: ${root.optString("status")}")
+                Log.e("ServerCheck", "서버 status 비정상: ${root.optString("status")}")
                 resetToIdleState()
             }
         } catch (e: Exception) {
-            Log.e("ServerCheck", "JSON 파싱 중 에러 발생: ${e.message}")
-            e.printStackTrace()
+            Log.e("ServerCheck", "JSON 파싱 에러: ${e.message}")
             resetToIdleState()
+        }
+    }
+
+    /** 단계 완료 재확인 다이얼로그 — AI 판단과 실제 이동을 분리 */
+    private fun showStepConfirmDialog() {
+        if (!isScheduleMode) return
+        runOnUiThread {
+            val step = scheduleSteps.getOrElse(currentStepIndex) { scheduleTitle }
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("현재 단계를 모두 했나요?")
+                .setMessage(step)
+                .setPositiveButton("했어요") { _, _ ->
+                    awaitingFallbackButton = false
+                    proceedToNextStep()
+                }
+                .setNeutralButton("아직이에요") { _, _ ->
+                    awaitingFallbackButton = false
+                    val msg = "괜찮아요, 천천히 해봐요."
+                    addMsg(msg, UserChatMessage.TYPE_OTHER, false, null, null)
+                    ttsManager.speak(msg)
+                }
+                .setNegativeButton("도와주세요") { _, _ ->
+                    awaitingFallbackButton = false
+                    val helpText = "도와주세요"
+                    addMsg(helpText, UserChatMessage.TYPE_MINE, false, null, null)
+                    uploadToServer(null, null, helpText)
+                }
+                .setCancelable(false)
+                .show()
         }
     }
 

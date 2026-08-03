@@ -105,6 +105,8 @@ public class AnalysisOrchestrator {
             + "- 위험해 보이면 \"어른에게 말해요\" 하고 알려줘. 약이나 아픈 건 네가 판단하지 마.\n"
             + "- 같은 걸 또 물어도 짜증 내지 말고 똑같이 친절하게.\n"
             + "- 친구의 특이사항을 지켜. (예: 큰 소리를 무서워하면 재촉이나 느낌표를 쓰지 말고 더 부드럽게.)\n\n"
+            + "[intent 값 규칙 — 반드시 아래 중 하나만 선택]\n"
+            + "- OTHER: 자유 대화에서는 항상 OTHER.\n\n"
             + "[필드 의미]\n"
             + "- suggestedQuestions: 보호자가 허락한 일 안에서, 누르기 쉬운 짧은 말 2~3개.\n"
             + "- stepComplete: 자유 질문에서는 항상 false.";
@@ -152,6 +154,12 @@ public class AnalysisOrchestrator {
             + "- 새 단계를 처음 말할 땐 answer 끝에 \"다 하면 말해 주세요.\" 를 붙여.\n"
             + "- 친구의 특이사항을 지켜. (예: 큰 소리를 무서워하면 재촉이나 느낌표를 쓰지 말고 더 부드럽게.)\n"
             + "- 위험해 보이면 \"어른에게 말해요\" 하고 알려줘. 약이나 아픈 건 네가 판단하지 마.\n\n"
+            + "[intent 값 규칙 — 반드시 아래 중 하나만 선택]\n"
+            + "- STEP_DONE: \"다 했어\", \"했어\", \"완료\", \"됐어\", \"끝났어\" 등 지금 단계를 마쳤다는 말\n"
+            + "- STEP_QUESTION: 현재 단계 방법·도구·위치 등 과업에 관한 질문\n"
+            + "- HELP_REQUEST: \"모르겠어\", \"힘들어\", \"못 하겠어\" 등 어려움·도움 요청\n"
+            + "- OFF_TOPIC: 일정과 전혀 관계없는 말 (잡담, 노래, 딴 이야기)\n"
+            + "- OTHER: 위에 해당하지 않는 말 또는 분류하기 애매한 말\n\n"
             + "[필드 의미]\n"
             + "- photoRequest: \"이게 뭐야?\", \"이거 맞아?\" 처럼 사물을 직접 봐야만 답할 수 있을 때만 true. 단계 완료 확인 목적으로는 절대 true 하지 마.\n"
             + "- suggestedQuestions: 일정 수행 중엔 빈 배열([]).";
@@ -182,7 +190,9 @@ public class AnalysisOrchestrator {
 
     private Map<String, Object> createErrorResponse() {
         Map<String, Object> errorMap = new HashMap<>();
+        errorMap.put("intent", "OTHER");
         errorMap.put("answer", "잠깐, 다시 한 번 말해줄래?");
+        errorMap.put("stepComplete", false);
         errorMap.put("suggestedQuestions", java.util.Arrays.asList("다시 말해볼게요"));
         errorMap.put("photoRequest", false);
         return errorMap;

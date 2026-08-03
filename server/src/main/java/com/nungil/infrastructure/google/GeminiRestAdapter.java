@@ -46,17 +46,21 @@ public class GeminiRestAdapter {
         return credentials.getAccessToken().getTokenValue();
     }
 
-    // ── 채팅/일정 공통 responseSchema (4필드 고정) ──────────────────────────
-    private static final Map<String, Object> CHAT_SCHEMA = Map.of(
-        "type", "OBJECT",
-        "properties", Map.of(
-            "answer",             Map.of("type", "STRING"),
-            "stepComplete",       Map.of("type", "BOOLEAN"),
-            "suggestedQuestions", Map.of("type", "ARRAY", "items", Map.of("type", "STRING")),
-            "photoRequest",       Map.of("type", "BOOLEAN")
-        ),
-        "required", List.of("answer", "stepComplete", "suggestedQuestions", "photoRequest")
-    );
+    // ── 채팅/일정 공통 responseSchema (5필드: intent 추가) ──────────────────
+    private static final Map<String, Object> CHAT_SCHEMA;
+    static {
+        Map<String, Object> props = new java.util.LinkedHashMap<>();
+        props.put("intent",             Map.of("type", "STRING"));
+        props.put("answer",             Map.of("type", "STRING"));
+        props.put("stepComplete",       Map.of("type", "BOOLEAN"));
+        props.put("suggestedQuestions", Map.of("type", "ARRAY", "items", Map.of("type", "STRING")));
+        props.put("photoRequest",       Map.of("type", "BOOLEAN"));
+        CHAT_SCHEMA = Map.of(
+            "type", "OBJECT",
+            "properties", props,
+            "required", List.of("intent", "answer", "stepComplete", "suggestedQuestions", "photoRequest")
+        );
+    }
 
     // ── 단계 생성용 responseSchema (문자열 배열) ────────────────────────────
     private static final Map<String, Object> STEPS_SCHEMA = Map.of(
@@ -142,7 +146,7 @@ public class GeminiRestAdapter {
         } catch (Exception e) {
             System.err.println("[Gemini Error] " + e.getMessage());
             if (schema == null) return null;   // 평문 모드: 호출측이 자체 폴백 처리
-            return "{\"answer\": \"잠깐, 다시 한 번 말해줄래?\", \"suggestedQuestions\": [], \"stepComplete\": false, \"photoRequest\": false}";
+            return "{\"intent\": \"OTHER\", \"answer\": \"잠깐, 다시 한 번 말해줄래?\", \"suggestedQuestions\": [], \"stepComplete\": false, \"photoRequest\": false}";
         }
     }
 
@@ -153,7 +157,7 @@ public class GeminiRestAdapter {
             List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
             return (String) parts.get(0).get("text");
         } catch (Exception e) {
-            return "{\"answer\": \"응답 형식이 올바르지 않습니다.\", \"suggestedQuestions\": [], \"stepComplete\": false, \"photoRequest\": false}";
+            return "{\"intent\": \"OTHER\", \"answer\": \"응답 형식이 올바르지 않습니다.\", \"suggestedQuestions\": [], \"stepComplete\": false, \"photoRequest\": false}";
         }
     }
 }
