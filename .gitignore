@@ -7,6 +7,8 @@
 /client/.idea/workspace.xml
 /client/.idea/navEditor.xml
 /client/.idea/assetWizardSettings.xml
+/client/.idea/deploymentTargetSelector.xml
+/client/.idea/misc.xml
 /client/.DS_Store
 /client/build
 /client/app/build
@@ -16,6 +18,8 @@
 /client/.cxx
 /client/local.properties
 /client/.claude
+
+/client/app/src/main/java/com/example/config/AppConfig.kt
 
 # Vosk Model (100MB 초과 파일 방지)
 **/src/main/assets/model-ko/
