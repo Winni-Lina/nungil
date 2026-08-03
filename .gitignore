@@ -79,3 +79,6 @@ seed_runner.py
 
 # 빌드 산출물 APK (배포는 GitHub Releases 사용, 100MB 초과 방지)
 *.apk
+
+
+/apacheserver/

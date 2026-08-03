@@ -30,7 +30,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.myapplication.user.UserStartActivity
 import com.example.myapplication.R
-import com.example.myapplication.common.model.UserChatLog
 import com.example.myapplication.common.model.UserChatMessage
 import com.example.myapplication.config.AppConfig
 import com.example.myapplication.core.manager.TTSManager
@@ -62,7 +61,6 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         .build()
 
     private val chatList: MutableList<UserChatMessage> = mutableListOf()
-    private val conversationHistory: MutableList<UserChatLog> = mutableListOf()
     private val gson = Gson()
 
     private lateinit var adapter: ChatAdapter
@@ -151,7 +149,6 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
         val welcomeMsg = "안녕! 나는 똘똘이야. 뭐든 물어봐!"
         addMsg(welcomeMsg, UserChatMessage.TYPE_OTHER, false, null, mutableListOf("오늘 날씨 어때?", "넌 누구니?"))
-        conversationHistory.add(UserChatLog("model", welcomeMsg))
         mainHandler.postDelayed({ ttsManager.speak(welcomeMsg) }, 1000)
 
         loadUserDataFromDB()
@@ -286,15 +283,13 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
             voskManager.stopListening()
         }
 
-        // 히스토리에 현재 질문 추가 (순수 대화 내용만)
-        if (text != null) conversationHistory.add(UserChatLog("user", text))
-
         val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
         val textMt = "text/plain; charset=utf-8".toMediaTypeOrNull()
 
-        // historyJson: 순수 대화 히스토리 JSON만 전송 (시스템 정보 없이)
+        // 대화 히스토리는 더 이상 클라가 보내지 않는다.
+        // 서버가 CHAT_LOG에 매 턴 저장하고, 이전 대화도 DB(최근 N턴)에서 재구성한다.
         builder.addFormDataPart("userId",      null, USER_ID.toRequestBody(textMt))
-        builder.addFormDataPart("historyJson", null, gson.toJson(conversationHistory).toRequestBody(textMt))
+        builder.addFormDataPart("userIdx",     null, USER_IDX.toString().toRequestBody(textMt))
         builder.addFormDataPart("userContext", null, buildUserContext().toRequestBody(textMt))
         // textPrompt: 질문 텍스트만 전송 (컨텍스트 중복 없이)
         text?.let { builder.addFormDataPart("textPrompt", null, it.toRequestBody(textMt)) }
@@ -304,6 +299,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         val urlBuilder = SERVER_URL.toHttpUrl().newBuilder().apply {
             addQueryParameter("mode", mode)
             if (isScheduleMode) {
+                addQueryParameter("scheduleId", currentScheduleId.toString())
                 addQueryParameter("scheduleTitle", scheduleTitle)
                 addQueryParameter("currentStep", scheduleSteps.getOrElse(currentStepIndex) { scheduleTitle })
                 addQueryParameter("stepIndex", currentStepIndex.toString())
@@ -364,7 +360,6 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                 if (answer.startsWith("{") && answer.contains("\"answer\"")) {
                     try { answer = JSONObject(answer).optString("answer", answer).trim() } catch (_: Exception) {}
                 }
-                conversationHistory.add(UserChatLog("model", answer))
 
                 val suggestArray = result.optJSONArray("suggestedQuestions")
                 val suggests = mutableListOf<String?>()
@@ -590,12 +585,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private fun sendSchedulePromptToAI() {
         if (loadingBar.visibility == View.VISIBLE || isRecording) return
         voskManager.stopListening()
-        // 새 단계 시작 시 히스토리에서 이전 단계 대화 제거 (최근 2개만 유지)
-        if (currentStepIndex > 0 && conversationHistory.size > 4) {
-            val recent = conversationHistory.takeLast(2).toMutableList()
-            conversationHistory.clear()
-            conversationHistory.addAll(recent)
-        }
+        // (이전 단계 대화 트림 로직 제거) 대화 컨텍스트는 서버가 DB 최근 N턴으로 관리한다.
         val prompt = buildSchedulePrompt()
         addMsg("📅 $scheduleTitle ${stepProgressLabel()}", UserChatMessage.TYPE_MINE, false, null, null)
         uploadToServer(null, null, prompt)
@@ -626,7 +616,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private fun finishSchedule() {
         ScheduleRepository.completeSchedule(currentScheduleId)
         val finishedTitle = scheduleTitle
-        val historyJson = gson.toJson(conversationHistory)
+        val finishedScheduleId = currentScheduleId
         currentStepIndex = -1; currentScheduleId = -1
         setBearMood(BearMood.PRAISE)
 
@@ -636,12 +626,11 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         val summaryMsgIndex = chatList.size - 1
         ttsManager.speak(defaultMsg)
 
-        requestScheduleSummary(finishedTitle, historyJson) { summary ->
+        requestScheduleSummary(finishedTitle, finishedScheduleId) { summary ->
             runOnUiThread {
                 if (summary.isNotBlank() && summaryMsgIndex < chatList.size) {
                     chatList[summaryMsgIndex].content = summary
                     adapter.notifyItemChanged(summaryMsgIndex)
-                    conversationHistory.add(UserChatLog("model", summary))
                     ttsManager.speak(summary)
                 }
             }
@@ -649,12 +638,12 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     }
 
     /** 서버에 완료 요약 요청 */
-    private fun requestScheduleSummary(title: String, historyJson: String, onResult: (String) -> Unit) {
+    private fun requestScheduleSummary(title: String, scheduleId: Int, onResult: (String) -> Unit) {
         val url = AppConfig.BASE_URL + "api/v1/question/summarize"
         val bodyJson = JSONObject().apply {
             put("userId", USER_ID)
             put("scheduleTitle", title)
-            put("historyJson", historyJson)
+            put("scheduleId", scheduleId)
         }.toString()
         val request = Request.Builder()
             .url(url)

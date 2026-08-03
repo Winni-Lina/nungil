@@ -1,35 +1,50 @@
 package com.nungil.infrastructure.google;
 
 import java.util.Base64;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nungil.domain.chat.ChatLogMapper;
+import com.nungil.domain.chat.ChatLogVO;
 
 @Service
 public class AnalysisOrchestrator {
 
+    private static final int    CHAT_HISTORY_LIMIT     = 8;   // 자유대화: 최근 8턴
+    private static final int    SCHEDULE_HISTORY_LIMIT = 6;   // 일정: 최근 6턴
+    private static final int    MSG_MAX_CHARS          = 600; // message 컬럼(VARCHAR2 2000 byte) 안전 상한
+    private static final String FALLBACK_ANSWER        = "잠깐, 다시 한 번 말해줄래?";
+
     private final GoogleSttClient sttClient;
     private final GeminiRestAdapter geminiAdapter;
+    private final ChatLogMapper chatLogMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public AnalysisOrchestrator(GoogleSttClient sttClient, GeminiRestAdapter geminiAdapter) {
+    public AnalysisOrchestrator(GoogleSttClient sttClient, GeminiRestAdapter geminiAdapter,
+                                ChatLogMapper chatLogMapper) {
         this.sttClient = sttClient;
         this.geminiAdapter = geminiAdapter;
+        this.chatLogMapper = chatLogMapper;
     }
 
     /** 눈길 핵심 파이프라인: 음성/이미지/텍스트를 받아서 최종 분석 결과 반환 */
     public Map<String, Object> execute(
-            String userId, String historyJson, String userContext,
+            String userId, int userIdx, long scheduleId,
+            String historyJson, String userContext,
             MultipartFile voiceFile, MultipartFile imageFile,
             String textPrompt, String mode,
             String scheduleTitle, String currentStep,
             int stepIndex, int totalSteps,
             String specialNote, String stepsJson) {
         try {
+            boolean isSchedule = "schedule".equals(mode);
+
             // ── 1. 음성 → 텍스트 변환 (STT) ──────────────────────────────────
             String question = (voiceFile != null && !voiceFile.isEmpty())
                     ? sttClient.transcribe(voiceFile)
@@ -45,12 +60,15 @@ public class AnalysisOrchestrator {
                 contentType = imageFile.getContentType();
             }
 
-            // ── 3. 프롬프트 구성 (system / user 분리) ─────────────────────────
-            String[] prompts = "schedule".equals(mode)
-                    ? buildSchedulePrompt(userContext, historyJson, question,
+            // ── 3. 이전 대화 로드 (DB 최근 N턴) — 클라가 보내던 historyJson 대체 ──
+            String historyText = loadRecentHistory(userId, userIdx, scheduleId, isSchedule);
+
+            // ── 4. 프롬프트 구성 (system / user 분리) ─────────────────────────
+            String[] prompts = isSchedule
+                    ? buildSchedulePrompt(userContext, historyText, question,
                                           scheduleTitle, currentStep, stepIndex, totalSteps,
                                           specialNote)
-                    : buildChatPrompt(userContext, historyJson, question);
+                    : buildChatPrompt(userContext, historyText, question);
 
             String systemInstruction = prompts[0];
             String userMessage = prompts[1];
@@ -78,6 +96,9 @@ public class AnalysisOrchestrator {
                 aiResult.put("answer", answer);
             }
 
+            // ── 대화 로그 저장 (append-only) : 사용자 발화 + AI 답변 ──────────
+            saveTurns(userId, userIdx, scheduleId, isSchedule, question, aiResult.get("answer"));
+
             Map<String, Object> result = new HashMap<>(aiResult);
             result.put("userId", userId);
             result.put("transcribedText", question.equals("....") ? "" : question);
@@ -90,7 +111,7 @@ public class AnalysisOrchestrator {
     }
 
     // ── 자유 채팅 프롬프트 ────────────────────────────────────────────────────
-    private String[] buildChatPrompt(String userContext, String historyJson, String question) {
+    private String[] buildChatPrompt(String userContext, String historyText, String question) {
         String system =
             "너는 \"똘똘이\"야. 지적장애가 있는 친구의 궁금한 것을 풀어 주는 따뜻한 도우미야.\n\n"
             + "[답하는 방법]\n"
@@ -110,7 +131,7 @@ public class AnalysisOrchestrator {
             + "- stepComplete: 자유 질문에서는 항상 false.";
 
         String user = (userContext != null && !userContext.isBlank() ? userContext + "\n\n" : "")
-                + "[이전 대화]\n" + safeHistory(historyJson)
+                + "[이전 대화]\n" + historyText
                 + "\n\n[사용자 질문] " + question;
 
         return new String[]{ system, user };
@@ -119,7 +140,7 @@ public class AnalysisOrchestrator {
     // ── 일정 수행 프롬프트 ────────────────────────────────────────────────────
     // 단계 완료 판단은 클라이언트 키워드 감지가 소유. AI는 안내·질문대응만 함.
     private String[] buildSchedulePrompt(
-            String userContext, String historyJson, String question,
+            String userContext, String historyText, String question,
             String scheduleTitle, String currentStep,
             int stepIndex, int totalSteps,
             String specialNote) {
@@ -166,18 +187,53 @@ public class AnalysisOrchestrator {
         user.append("[일정] ").append(scheduleTitle).append("\n")
             .append("[현재 단계] ").append(stepIndex + 1).append("/").append(totalSteps)
             .append(" — ").append(stepStr).append("\n\n")
-            .append("[이전 대화]\n").append(safeHistory(historyJson)).append("\n\n")
+            .append("[이전 대화]\n").append(historyText).append("\n\n")
             .append("[사용자 말] ").append(question);
 
         return new String[]{ system, user.toString() };
     }
 
-    /** historyJson이 비어있거나 파싱 불가면 "(대화 없음)" 반환 */
-    private String safeHistory(String historyJson) {
-        if (historyJson == null || historyJson.isBlank() || historyJson.equals("[]")) {
+    /** DB에서 최근 N턴을 읽어 "사용자: …\n똘똘이: …" 형태의 이전 대화 텍스트로 조립 */
+    private String loadRecentHistory(String userId, int userIdx, long scheduleId, boolean isSchedule) {
+        try {
+            List<ChatLogVO> logs = (isSchedule && scheduleId > 0)
+                    ? chatLogMapper.findRecentBySchedule(scheduleId, SCHEDULE_HISTORY_LIMIT)
+                    : chatLogMapper.findRecentChat(userId, userIdx, CHAT_HISTORY_LIMIT);
+            if (logs == null || logs.isEmpty()) return "(대화 없음)";
+            Collections.reverse(logs); // 최신순 → 시간순
+            StringBuilder sb = new StringBuilder();
+            for (ChatLogVO log : logs) {
+                String who = "user".equals(log.getRole()) ? "사용자" : "똘똘이";
+                sb.append(who).append(": ").append(log.getMessage()).append("\n");
+            }
+            return sb.toString().trim();
+        } catch (Exception e) {
+            System.err.println("[ChatLog] 이전 대화 로드 실패: " + e.getMessage());
             return "(대화 없음)";
         }
-        return historyJson;
+    }
+
+    /** 사용자 발화 + AI 답변을 CHAT_LOG에 저장. 저장 실패는 대화 흐름을 막지 않는다. */
+    private void saveTurns(String userId, int userIdx, long scheduleId, boolean isSchedule,
+                           String question, Object answerObj) {
+        try {
+            Long schedFk = (isSchedule && scheduleId > 0) ? scheduleId : null;
+            // 사용자 발화 (빈 발화 '....' 제외)
+            if (question != null && !question.isBlank() && !question.equals("....")) {
+                chatLogMapper.insert(new ChatLogVO(userId, userIdx, schedFk, "user", "chat", clamp(question)));
+            }
+            // AI 답변 (폴백 문구는 저장 안 함 → 히스토리 오염 방지)
+            String answer = answerObj != null ? String.valueOf(answerObj).trim() : "";
+            if (!answer.isBlank() && !FALLBACK_ANSWER.equals(answer)) {
+                chatLogMapper.insert(new ChatLogVO(userId, userIdx, schedFk, "model", "chat", clamp(answer)));
+            }
+        } catch (Exception e) {
+            System.err.println("[ChatLog] 대화 저장 실패: " + e.getMessage());
+        }
+    }
+
+    private String clamp(String s) {
+        return s.length() > MSG_MAX_CHARS ? s.substring(0, MSG_MAX_CHARS) : s;
     }
 
     private Map<String, Object> createErrorResponse() {

@@ -1,0 +1,101 @@
+======================================================================
+ 눈길(Nungil) 수정 내역 총정리  -  2026-08-03
+ 주제: 대화 로그 DB 저장 리팩터 + 서버 환경/설정 버그 픽스
+======================================================================
+
+
+[A] 환경/설정 버그 픽스 (서버가 아예 안 뜨던 문제들)
+----------------------------------------------------------------------
+1. application.properties 없어서 Spring 컨텍스트 기동 실패
+   -> 템플릿(.example) 복사로 생성  (server/src/main/resources/)
+
+2. 자바 클래스가 톰캣에 배포 안 됨 -> 모든 경로 404
+   -> 빌드된 클래스 배포 반영
+   -> 근본 원인: Eclipse "Build Automatically" 꺼짐 의심 (켜둘 것)
+
+3. DB 서비스명 오타 -> 로그인 시 [ERROR] null
+   -> db.url : jdbc:oracle:thin:@localhost:1521/orcl
+              -> jdbc:oracle:thin:@localhost:1521/XE
+   (Oracle 21c XE의 서비스명은 XE, 계정은 공통사용자 c##nungil)
+
+4. Vertex AI 403 (project-id 불일치)
+   -> google.vertex.project-id : 3ff58fca...(잘못된 값)
+                                -> avian-line-354005 (서비스계정 실제 프로젝트)
+
+   ※ application.properties는 .gitignore 대상(로컬 전용)이라 커밋엔 안 들어감.
+     위 3,4번은 로컬 값만 바로잡은 것.
+
+
+[B] 대화 로그 DB 저장 기능 (신규 구현)
+----------------------------------------------------------------------
+구조 변화:
+  Before) 대화 기록의 주인 = 클라이언트(앱 메모리).
+          매 AI 요청마다 전체 히스토리(historyJson)를 통째로 업로드. 서버는 저장 안 함.
+  After)  대화 기록의 주인 = 서버(DB).
+          서버가 매 턴을 CHAT_LOG에 저장하고, 이전 대화도 DB 최근 N턴으로 재구성.
+          클라는 "이번 발화 한 줄"만 전송.
+
+신규 파일 3개:
+  - server/src/main/java/com/nungil/domain/chat/ChatLogVO.java      (로그 1건 모델)
+  - server/src/main/java/com/nungil/domain/chat/ChatLogMapper.java  (insert/최근N턴/일정별 조회)
+  - server/src/main/resources/mappers/ChatLogMapper.xml            (SQL)
+
+수정 파일 3개 (서버):
+  - server/src/main/resources/schema.sql
+        CHAT_LOG 테이블 + 인덱스 2개 추가
+  - server/src/main/java/com/nungil/infrastructure/google/AnalysisOrchestrator.java
+        매 턴 DB 저장 + 이전대화 DB에서 재구성 (자유 8턴 / 일정 6턴)
+  - server/src/main/java/com/nungil/api/nungil/NungilAnalyzeController.java
+        /analyze 에 userIdx·scheduleId 추가, /summarize 는 scheduleId 로 DB 조회
+
+수정 파일 1개 (클라이언트):
+  - client/app/src/main/java/com/example/myapplication/user/chat/UserChatActivity.kt
+        conversationHistory 제거, historyJson 전송 제거,
+        userIdx·scheduleId 전송, /summarize 는 scheduleId 전송
+
+CHAT_LOG 테이블 구조:
+  chat_id(PK, IDENTITY) | user_id | user_idx | schedule_id(nullable)
+  | role('user'|'model') | kind('chat', 미래 'summary') | message | created_at
+  - append-only(삭제/수정 없음), FK 없음(로그 유실 방지)
+  - 인덱스: (user_id,user_idx,created_at), (schedule_id,created_at)
+  - created_at 인덱스 = 향후 "어제/특정일" 날짜범위 회상 대비
+
+컨텍스트 규칙:
+  - 자유대화: schedule_id IS NULL 최근 8턴
+  - 일정대화: 해당 schedule_id 최근 6턴
+  - 자유대화 <-> 일정대화 완전 분리
+  - 하위호환: userIdx 없으면 1, scheduleId 없으면 -1, 구 클라의 historyJson 무시/폴백
+
+구현 중 잡은 버그:
+  - MyBatis + Oracle null 함정: nullable 컬럼에 null 넣을 때 jdbcType 없으면
+    "잘못된 열 유형" 예외로 조용히 실패 -> 자유대화만 저장 안 되던 것
+    -> #{scheduleId,jdbcType=NUMERIC} 로 해결
+
+
+[C] 현재 상태
+----------------------------------------------------------------------
+  서버 컴파일/배포 ................. 완료
+  사용자 발화 저장 ................. 정상 (실제 앱에서 DB 저장 확인됨)
+  이전 대화 DB 재구성 .............. 정상 (로그의 [이전 대화]가 증거)
+  자유대화 <-> 일정 분리 ........... 정상
+  클라이언트 빌드 .................. 완료
+  AI 답변(model) 저장 .............. 대기 (Vertex API 켜지면 자동)
+                                     지금은 403 폴백이라 오염방지로 의도적 스킵
+  Vertex AI API 활성화 + 결제 ...... [남은 유일한 블로커] GCP 콘솔에서 켜야 함
+
+
+[D] 남은 할 일 (딱 하나)
+----------------------------------------------------------------------
+GCP 콘솔에서 Vertex AI API 사용 설정 (프로젝트 avian-line-354005):
+  https://console.developers.google.com/apis/api/aiplatform.googleapis.com/overview?project=avian-line-354005
+  + 결제(Billing) 연결 확인
+  -> 몇 분 뒤 앱에서 대화하면 AI 응답 + model 턴 저장까지 전부 정상 동작.
+
+
+[E] 미룬 기능 (설계엔 감안됨)
+----------------------------------------------------------------------
+"어제/어저께" 같은 날짜범위 대화 회상 = 미구현.
+단, append-only + created_at 인덱스 + KST 일관성 + 조회전략 분리로 대비해둠.
+나중에 findByDateRange 메서드 추가만 하면 됨.
+
+======================================================================

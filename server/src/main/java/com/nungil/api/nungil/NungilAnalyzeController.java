@@ -1,6 +1,7 @@
 package com.nungil.api.nungil;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.web.bind.annotation.PostMapping;
@@ -12,6 +13,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nungil.domain.chat.ChatLogMapper;
+import com.nungil.domain.chat.ChatLogVO;
 import com.nungil.infrastructure.google.AnalysisOrchestrator;
 import com.nungil.infrastructure.google.GeminiRestAdapter;
 
@@ -21,24 +24,29 @@ public class NungilAnalyzeController {
 
     private final AnalysisOrchestrator orchestrator;
     private final GeminiRestAdapter geminiAdapter;
+    private final ChatLogMapper chatLogMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public NungilAnalyzeController(AnalysisOrchestrator orchestrator,
-                                   GeminiRestAdapter geminiAdapter) {
+                                   GeminiRestAdapter geminiAdapter,
+                                   ChatLogMapper chatLogMapper) {
         this.orchestrator = orchestrator;
         this.geminiAdapter = geminiAdapter;
+        this.chatLogMapper = chatLogMapper;
     }
 
     /** 통합 분석 API - 음성/이미지/텍스트 중 있는 것만 전송 */
     @PostMapping("/analyze")
     public Map<String, Object> analyze(
             @RequestPart(value = "userId",        required = false) String id,
+            @RequestPart(value = "userIdx",       required = false) String userIdxStr,
             @RequestPart(value = "historyJson",   required = false) String historyJson,
             @RequestPart(value = "userContext",   required = false) String userContext,
             @RequestPart(value = "voiceFile",     required = false) MultipartFile voiceFile,
             @RequestPart(value = "imageFile",     required = false) MultipartFile imageFile,
             @RequestParam(value = "textPrompt",   required = false) String textPrompt,
             @RequestParam(value = "mode",         required = false, defaultValue = "chat") String mode,
+            @RequestParam(value = "scheduleId",   required = false, defaultValue = "-1") long scheduleId,
             @RequestParam(value = "scheduleTitle",required = false, defaultValue = "") String scheduleTitle,
             @RequestParam(value = "currentStep",  required = false, defaultValue = "") String currentStep,
             @RequestParam(value = "stepIndex",    required = false, defaultValue = "0") int stepIndex,
@@ -54,9 +62,14 @@ public class NungilAnalyzeController {
             if (id != null && !id.isEmpty()) {
                 userId = id;
             }
+            // userIdx: 폼 파트 없거나 파싱 실패 시 1 (구버전 클라 하위호환)
+            int userIdx = 1;
+            try {
+                if (userIdxStr != null && !userIdxStr.isBlank()) userIdx = Integer.parseInt(userIdxStr.trim());
+            } catch (NumberFormatException ignore) {}
 
             Map<String, Object> result = orchestrator.execute(
-                    userId, historyJson, userContext, voiceFile, imageFile, textPrompt,
+                    userId, userIdx, scheduleId, historyJson, userContext, voiceFile, imageFile, textPrompt,
                     mode, scheduleTitle, currentStep, stepIndex, totalSteps, specialNote, stepsJson);
 
             System.out.println("[결과] 분석 완료 userId=" + userId + ", mode=" + mode);
@@ -80,7 +93,19 @@ public class NungilAnalyzeController {
         Map<String, Object> response = new HashMap<>();
         try {
             String scheduleTitle = body.get("scheduleTitle") != null ? body.get("scheduleTitle").toString() : "일정";
-            String historyJson = body.get("historyJson") != null ? body.get("historyJson").toString() : "";
+            // 대화 기록: scheduleId 있으면 DB에서 조회, 없으면(구버전 클라) historyJson 폴백
+            long scheduleId = -1;
+            try {
+                if (body.get("scheduleId") != null) scheduleId = Long.parseLong(body.get("scheduleId").toString());
+            } catch (NumberFormatException ignore) {}
+
+            String historyText;
+            if (scheduleId > 0) {
+                historyText = buildHistoryText(chatLogMapper.findBySchedule(scheduleId));
+            } else {
+                String historyJson = body.get("historyJson") != null ? body.get("historyJson").toString() : "";
+                historyText = historyJson.isBlank() ? "(기록 없음)" : historyJson;
+            }
 
             String system = "## 역할\n"
                     + "당신은 지적 장애인이 일정을 잘 마쳤을 때 따뜻하게 칭찬하고\n"
@@ -93,7 +118,7 @@ public class NungilAnalyzeController {
 
             String user = "## 완료한 일정\n" + scheduleTitle + "\n\n"
                     + "## 진행 대화 기록\n"
-                    + (historyJson.isBlank() ? "(기록 없음)" : historyJson) + "\n\n"
+                    + historyText + "\n\n"
                     + "위 일정을 다 마쳤어. 칭찬과 함께 짧게 요약해줘.";
 
             String message = geminiAdapter.generateText(system, user);
@@ -118,5 +143,16 @@ public class NungilAnalyzeController {
             response.put("message", "오늘 일정 다 했어요! 잘했어요!");
         }
         return response;
+    }
+
+    /** CHAT_LOG 목록을 "사용자: …\n똘똘이: …" 형태 텍스트로 조립 (완료 요약용) */
+    private String buildHistoryText(List<ChatLogVO> logs) {
+        if (logs == null || logs.isEmpty()) return "(기록 없음)";
+        StringBuilder sb = new StringBuilder();
+        for (ChatLogVO log : logs) {
+            String who = "user".equals(log.getRole()) ? "사용자" : "똘똘이";
+            sb.append(who).append(": ").append(log.getMessage()).append("\n");
+        }
+        return sb.toString().trim();
     }
 }
