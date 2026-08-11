@@ -47,7 +47,7 @@ class CircularTimelineView @JvmOverloads constructor(
     }
     private val blockPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style     = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
+        strokeCap = Paint.Cap.BUTT
     }
     private val tickSmallPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color       = Color.parseColor("#9EA9C8")
@@ -180,16 +180,9 @@ class CircularTimelineView @JvmOverloads constructor(
         }
     }
 
-    private data class BlockInfo(
-        val schedule: Schedule, val startAngle: Float,
-        val sweepAngle: Float, val isCrowded: Boolean
-    )
-
     private fun drawBlocks(canvas: Canvas) {
-        val gapDeg = 3f
-        val minSweep = 7f
-        val defaultSweep = 360f / 24f * 0.85f
-        val crowdedThreshold = 360f / 24f * 1.5f
+        val gapDeg = 2f
+        val maxSweep = 360f / 24f  // 1시간 = 15°
 
         val parsed = schedules.mapNotNull { s ->
             try {
@@ -199,41 +192,48 @@ class CircularTimelineView @JvmOverloads constructor(
             } catch (_: Exception) { null }
         }.sortedBy { it.second }
 
-        val blocks = mutableListOf<BlockInfo>()
+        if (parsed.isEmpty()) return
+
+        data class Block(val s: Schedule, val start: Float, var sweep: Float)
+        val blocks = mutableListOf<Block>()
+
         for (i in parsed.indices) {
             val (s, start) = parsed[i]
             val nextStart = if (i + 1 < parsed.size) parsed[i + 1].second
                             else parsed[0].second + 360f
-            val prevStart = if (i > 0) parsed[i - 1].second
-                            else parsed.last().second - 360f
             val available = nextStart - start
-            val sweep = min(defaultSweep, max(available - gapDeg, minSweep))
-            val crowded = available < crowdedThreshold || (start - prevStart) < crowdedThreshold
-            blocks.add(BlockInfo(s, start, sweep, crowded))
+            val sweep = min(maxSweep, max(available - gapDeg, 5f))
+            blocks.add(Block(s, start, sweep))
         }
 
-        val thinStroke = ringW * 0.55f
-        val normalStroke = ringW * 0.85f
+        val stroke = ringW * 0.85f
+        blockPaint.strokeWidth = stroke
 
-        for ((idx, b) in blocks.withIndex()) {
-            val baseColor = colorForTask(b.schedule.taskId)
-            blockPaint.color = if (b.schedule.status == "completed" || b.schedule.status == "abandoned") {
+        for (b in blocks) {
+            val baseColor = colorForTask(b.s.taskId)
+            blockPaint.color = if (b.s.status == "completed" || b.s.status == "abandoned") {
                 Color.argb(120, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor))
             } else baseColor
-            blockPaint.strokeWidth = if (b.isCrowded) thinStroke else normalStroke
 
-            canvas.drawArc(arcOval, b.startAngle, b.sweepAngle, false, blockPaint)
-
-            val midAngle = Math.toRadians((b.startAngle + b.sweepAngle / 2).toDouble())
-            val iconSize = if (b.isCrowded) sp(11f) else sp(15f)
-            blockIconPaint.textSize = iconSize
-            val iconR = if (b.isCrowded && idx % 2 == 1) outerR + ringW * 0.55f else outerR
-            val ix = (cx + iconR * cos(midAngle)).toFloat()
-            val iy = (cy + iconR * sin(midAngle)).toFloat()
-            canvas.drawText(iconForTask(b.schedule.taskName), ix, iy + iconSize / 3, blockIconPaint)
+            canvas.drawArc(arcOval, b.start, b.sweep, false, blockPaint)
         }
 
-        blockPaint.strokeWidth = normalStroke
+        for (i in blocks.indices) {
+            val b = blocks[i]
+            val midThis = b.start + b.sweep / 2
+            val prevMid = if (i > 0) blocks[i - 1].start + blocks[i - 1].sweep / 2
+                          else blocks.last().start + blocks.last().sweep / 2 - 360f
+            val nextMid = if (i < blocks.size - 1) blocks[i + 1].start + blocks[i + 1].sweep / 2
+                          else blocks[0].start + blocks[0].sweep / 2 + 360f
+            val minDist = min(abs(midThis - prevMid), abs(nextMid - midThis))
+            if (minDist < 22f) continue
+
+            val midAngle = Math.toRadians(midThis.toDouble())
+            blockIconPaint.textSize = sp(11f)
+            val ix = (cx + outerR * cos(midAngle)).toFloat()
+            val iy = (cy + outerR * sin(midAngle)).toFloat()
+            canvas.drawText(iconForTask(b.s.taskName), ix, iy + sp(11f) / 3, blockIconPaint)
+        }
     }
 
     private fun drawNowHand(canvas: Canvas) {
