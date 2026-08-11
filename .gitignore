@@ -86,3 +86,27 @@ seed_runner.py
 
 
 /apacheserver/
+
+
+# ============================================================
+#  추가 보안 — 절대 커밋 금지 (2026-08 보강)
+# ============================================================
+# 서명 키 / 인증서 (Android keystore, 개인키 등)
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+
+# 서버 설정/시크릿 (경로 무관 차단). ※ application.properties.example 은 확장자가 달라 추적됨
+**/application.properties
+application-secret.properties
+application-local.properties
+
+# 서비스 계정 / Firebase 키 (명시적 보강 — 이미 *.json 으로도 차단됨)
+**/serviceAccountKey.json
+**/google-services.json
+
+# 로그 파일 (루트 포함)
+*.log
