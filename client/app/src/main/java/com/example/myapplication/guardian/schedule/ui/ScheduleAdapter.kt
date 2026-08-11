@@ -56,7 +56,7 @@ class ScheduleAdapter(
         // 상태 뱃지
         val statusText = when (s.status) {
             "completed"   -> "완료"
-            "in_progress" -> "진행중"
+            "in_progress" -> "진행 중"
             "pending"     -> "예정"
             "abandoned"   -> "포기"
             else          -> s.status
