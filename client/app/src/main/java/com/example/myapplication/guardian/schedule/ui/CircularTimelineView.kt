@@ -156,7 +156,7 @@ class CircularTimelineView @JvmOverloads constructor(
         canvas.drawCircle(cx, cy, size / 2f - dp(4f), bgCirclePaint)
         canvas.drawArc(arcOval, -90f, 360f, false, ringBgPaint)
         drawTicks(canvas)
-        schedules.forEach { drawBlock(canvas, it) }
+        drawBlocks(canvas)
 
         if (displayMode) drawNowHand(canvas)
         else             drawSelectionDot(canvas)
@@ -180,34 +180,60 @@ class CircularTimelineView @JvmOverloads constructor(
         }
     }
 
-    private fun drawBlock(canvas: Canvas, s: Schedule) {
-        try {
-            val t = s.scheduledAt.split("T").getOrNull(1) ?: return
-            val p = t.split(":")
-            val h = p[0].toInt(); val m = p[1].toInt()
+    private data class BlockInfo(
+        val schedule: Schedule, val startAngle: Float,
+        val sweepAngle: Float, val isCrowded: Boolean
+    )
 
-            // 완료 상태는 옅게, 그 외엔 과업별 비비드 컬러
-            val baseColor = colorForTask(s.taskId)
-            val color = if (s.status == "completed") {
-                Color.argb(140, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor))
-            } else baseColor
-            blockPaint.color = color
+    private fun drawBlocks(canvas: Canvas) {
+        val gapDeg = 3f
+        val minSweep = 7f
+        val defaultSweep = 360f / 24f * 0.85f
+        val crowdedThreshold = 360f / 24f * 1.5f
 
-            val startAngle = timeToAngle(h, m)
-            val sweepAngle = max(360f / 24f * 1.4f, 16f)  // 비비드 웨지가 잘 보이도록 확대
+        val parsed = schedules.mapNotNull { s ->
+            try {
+                val t = s.scheduledAt.split("T").getOrNull(1) ?: return@mapNotNull null
+                val p = t.split(":")
+                s to timeToAngle(p[0].toInt(), p[1].toInt())
+            } catch (_: Exception) { null }
+        }.sortedBy { it.second }
 
-            canvas.drawArc(arcOval, startAngle, sweepAngle, false, blockPaint)
-
-            // 웨지 중앙에 아이콘만 표시 (바깥 텍스트 라벨은 카드 경계에 잘려서 제거)
-            val midAngle = Math.toRadians((startAngle + sweepAngle / 2).toDouble())
-            blockIconPaint.textSize = sp(15f)
-            val ix = (cx + outerR * cos(midAngle)).toFloat()
-            val iy = (cy + outerR * sin(midAngle)).toFloat()
-            canvas.drawText(iconForTask(s.taskName), ix, iy + blockIconPaint.textSize / 3, blockIconPaint)
-
-        } catch (e: Exception) {
-            Log.e("CircularTimelineView", "drawBlock error: scheduleId=${s.scheduleId}", e)
+        val blocks = mutableListOf<BlockInfo>()
+        for (i in parsed.indices) {
+            val (s, start) = parsed[i]
+            val nextStart = if (i + 1 < parsed.size) parsed[i + 1].second
+                            else parsed[0].second + 360f
+            val prevStart = if (i > 0) parsed[i - 1].second
+                            else parsed.last().second - 360f
+            val available = nextStart - start
+            val sweep = min(defaultSweep, max(available - gapDeg, minSweep))
+            val crowded = available < crowdedThreshold || (start - prevStart) < crowdedThreshold
+            blocks.add(BlockInfo(s, start, sweep, crowded))
         }
+
+        val thinStroke = ringW * 0.55f
+        val normalStroke = ringW * 0.85f
+
+        for ((idx, b) in blocks.withIndex()) {
+            val baseColor = colorForTask(b.schedule.taskId)
+            blockPaint.color = if (b.schedule.status == "completed" || b.schedule.status == "abandoned") {
+                Color.argb(120, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor))
+            } else baseColor
+            blockPaint.strokeWidth = if (b.isCrowded) thinStroke else normalStroke
+
+            canvas.drawArc(arcOval, b.startAngle, b.sweepAngle, false, blockPaint)
+
+            val midAngle = Math.toRadians((b.startAngle + b.sweepAngle / 2).toDouble())
+            val iconSize = if (b.isCrowded) sp(11f) else sp(15f)
+            blockIconPaint.textSize = iconSize
+            val iconR = if (b.isCrowded && idx % 2 == 1) outerR + ringW * 0.55f else outerR
+            val ix = (cx + iconR * cos(midAngle)).toFloat()
+            val iy = (cy + iconR * sin(midAngle)).toFloat()
+            canvas.drawText(iconForTask(b.schedule.taskName), ix, iy + iconSize / 3, blockIconPaint)
+        }
+
+        blockPaint.strokeWidth = normalStroke
     }
 
     private fun drawNowHand(canvas: Canvas) {
