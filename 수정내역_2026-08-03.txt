@@ -1,78 +1,119 @@
 ======================================================================
- 눈길(Nungil) 수정 내역 총정리  -  2026-08-03
- 주제: 대화 로그 DB 저장 리팩터 + 서버 환경/설정 버그 픽스
+ 「눈길」 대화 History 기능 작업 내역
+ 브랜치: feature/chat-history-api
+ 담당: 대화 History 기능 (주간 작업계획서 5장)
+ 작성일: 2026-08-12
 ======================================================================
+※ 주간 작업계획서(7월24일_v1.0) 5장 「대화 History 기능 담당」에 따라 구현.
+※ 이번 주 범위 = "서버 저장/조회 REST API"만. (앱 자동저장·Gemini 연동은 다음 주)
 
-[B] 대화 로그 DB 저장 기능 (신규 구현)
+
+1. 담당 기능
 ----------------------------------------------------------------------
-구조 변화:
-  Before) 대화 기록의 주인 = 클라이언트(앱 메모리).
-          매 AI 요청마다 전체 히스토리(historyJson)를 통째로 업로드. 서버는 저장 안 함.
-  After)  대화 기록의 주인 = 서버(DB).
-          서버가 매 턴을 CHAT_LOG에 저장하고, 이전 대화도 DB 최근 N턴으로 재구성.
-          클라는 "이번 발화 한 줄"만 전송.
-
-신규 파일 3개:
-  - server/src/main/java/com/nungil/domain/chat/ChatLogVO.java      (로그 1건 모델)
-  - server/src/main/java/com/nungil/domain/chat/ChatLogMapper.java  (insert/최근N턴/일정별 조회)
-  - server/src/main/resources/mappers/ChatLogMapper.xml            (SQL)
-
-수정 파일 3개 (서버):
-  - server/src/main/resources/schema.sql
-        CHAT_LOG 테이블 + 인덱스 2개 추가
-  - server/src/main/java/com/nungil/infrastructure/google/AnalysisOrchestrator.java
-        매 턴 DB 저장 + 이전대화 DB에서 재구성 (자유 8턴 / 일정 6턴)
-  - server/src/main/java/com/nungil/api/nungil/NungilAnalyzeController.java
-        /analyze 에 userIdx·scheduleId 추가, /summarize 는 scheduleId 로 DB 조회
-
-수정 파일 1개 (클라이언트):
-  - client/app/src/main/java/com/example/myapplication/user/chat/UserChatActivity.kt
-        conversationHistory 제거, historyJson 전송 제거,
-        userIdx·scheduleId 전송, /summarize 는 scheduleId 전송
-
-CHAT_LOG 테이블 구조:
-  chat_id(PK, IDENTITY) | user_id | user_idx | schedule_id(nullable)
-  | role('user'|'model') | kind('chat', 미래 'summary') | message | created_at
-  - append-only(삭제/수정 없음), FK 없음(로그 유실 방지)
-  - 인덱스: (user_id,user_idx,created_at), (schedule_id,created_at)
-  - created_at 인덱스 = 향후 "어제/특정일" 날짜범위 회상 대비
-
-컨텍스트 규칙:
-  - 자유대화: schedule_id IS NULL 최근 8턴
-  - 일정대화: 해당 schedule_id 최근 6턴
-  - 자유대화 <-> 일정대화 완전 분리
-  - 하위호환: userIdx 없으면 1, scheduleId 없으면 -1, 구 클라의 historyJson 무시/폴백
-
-구현 중 잡은 버그:
-  - MyBatis + Oracle null 함정: nullable 컬럼에 null 넣을 때 jdbcType 없으면
-    "잘못된 열 유형" 예외로 조용히 실패 -> 자유대화만 저장 안 되던 것
-    -> #{scheduleId,jdbcType=NUMERIC} 로 해결
+사용자 질문과 AI 답변을 Oracle DB(CHAT_HISTORY)에 저장하고,
+일정 번호별로 다시 조회하는 서버 REST API.
 
 
-[C] 현재 상태
+2. 현재 문제 (개선 전)
 ----------------------------------------------------------------------
-  서버 컴파일/배포 ................. 완료
-  사용자 발화 저장 ................. 정상 (실제 앱에서 DB 저장 확인됨)
-  이전 대화 DB 재구성 .............. 정상 (로그의 [이전 대화]가 증거)
-  자유대화 <-> 일정 분리 ........... 정상
-  클라이언트 빌드 .................. 완료
-  AI 답변(model) 저장 .............. 대기 (Vertex API 켜지면 자동)
-                                     지금은 403 폴백이라 오염방지로 의도적 스킵
-  Vertex AI API 활성화 + 결제 ...... [남은 유일한 블로커] GCP 콘솔에서 켜야 함
+- 사용자 질문/AI 답변이 UserChatActivity.kt의 conversationHistory(앱 메모리)에만
+  임시 저장됨 → 앱을 종료하면 대화가 사라진다.
+- 보호자가 사용자의 실제 질문 내용을 다시 확인할 수 없다.
 
 
-[D] 남은 할 일 (딱 하나)
+3. 이 기능이 필요한 이유
 ----------------------------------------------------------------------
-GCP 콘솔에서 Vertex AI API 사용 설정 (프로젝트 avian-line-354005):
-  https://console.developers.google.com/apis/api/aiplatform.googleapis.com/overview?project=avian-line-354005
-  + 결제(Billing) 연결 확인
-  -> 몇 분 뒤 앱에서 대화하면 AI 응답 + model 턴 저장까지 전부 정상 동작.
+대화가 DB에 남아야 다음 기능들의 토대가 된다.
+- 앱 재실행 후 과거 대화 복원
+- 보호자가 사용자 질문·AI 답변 확인
+- 현재 일정의 최근 대화를 Gemini가 참고
+- 질문이 반복된 단계 분석
+(위 연결 작업은 저장/조회 API가 안정화된 다음 주에 진행)
 
 
-[E] 미룬 기능 (설계엔 감안됨)
+4. 개선한 내용
 ----------------------------------------------------------------------
-"어제/어저께" 같은 날짜범위 대화 회상 = 미구현.
-단, append-only + created_at 인덱스 + KST 일관성 + 조회전략 분리로 대비해둠.
-나중에 findByDateRange 메서드 추가만 하면 됨.
+(1) CHAT_HISTORY 테이블 신설 (Oracle)
+    컬럼: message_id(PK,IDENTITY), guardian_id, user_idx, schedule_id,
+          step_index, chat_mode, sender, message, intent, created_at
+    인덱스: (guardian_id, user_idx, schedule_id, created_at)
+
+(2) 저장 API   POST /api/v1/chat-history
+    - body: guardianId, userIdx, scheduleId, stepIndex, chatMode, sender, message, intent
+    - 입력값 검증(거부 규칙):
+        chatMode ∉ {GENERAL, SCHEDULE}      → 거부
+        sender   ∉ {USER, ASSISTANT, SYSTEM} → 거부
+        message 가 비어있거나 공백만          → 거부
+        chatMode=SCHEDULE 인데 scheduleId 없음 → 거부
+    - 정상: {"status":"SUCCESS"}
+    - 거부: {"status":"ERROR","errorCode":"INVALID_REQUEST","message":사유}
+
+(3) 조회 API   GET /api/v1/chat-history?guardianId=&userIdx=&scheduleId=&chatMode=
+    - 조건: guardian_id + user_idx + schedule_id + chat_mode 일치
+      (scheduleId 없으면 schedule_id IS NULL = GENERAL 대화)
+    - 정렬: created_at 오름차순 (오래된→최근)
+    - 결과: {"status":"SUCCESS","messages":[{messageId,sender,message,intent,createdAt}, ...]}
+    - 대화 없으면: {"status":"SUCCESS","messages":[]}
+
+
+5. 수정/추가한 파일
+----------------------------------------------------------------------
+[신규]
+  server/src/main/resources/migration_chat_history.sql         (테이블 생성 SQL)
+  server/src/main/java/com/nungil/domain/chat/ChatHistoryVO.java
+  server/src/main/java/com/nungil/domain/chat/ChatHistoryMapper.java
+  server/src/main/java/com/nungil/domain/chat/ChatHistoryService.java   (검증 로직)
+  server/src/main/resources/mappers/ChatHistoryMapper.xml
+  server/src/main/java/com/nungil/api/guardian/chat/ChatHistoryController.java
+
+[미수정 / 안 건드림]
+  다른 기능 담당 파일(AnalysisOrchestrator, UserChatActivity 등)은 수정하지 않음.
+  대화 History 기능은 전부 위 신규 파일로만 구현.
+
+
+6. 입력부터 결과까지 동작 순서
+----------------------------------------------------------------------
+저장: 앱/클라 → POST /chat-history(JSON)
+      → Controller가 body 파싱 → Service.validate(허용값·필수값 검사)
+      → 통과 시 Mapper.insert → CHAT_HISTORY 1행 저장 → {status:SUCCESS}
+      → 검증 실패 시 저장 안 하고 {status:ERROR, 사유}
+
+조회: 앱/클라 → GET /chat-history(쿼리)
+      → Controller → Service.findMessages
+      → Mapper.findMessages (조건 4개 일치, created_at ASC)
+      → messages 목록 반환 (없으면 빈 배열)
+
+
+7. 정상 테스트 결과 (PASS)
+----------------------------------------------------------------------
+- USER 메시지 저장 → SUCCESS
+- ASSISTANT 메시지 저장 → SUCCESS
+- GENERAL 저장(schedule_id/step_index = NULL) → SUCCESS
+- 긴 메시지(600자) 저장 → 잘리지 않고 저장(len=600)
+- 일정10 조회 → 2건, USER→ASSISTANT 시간순, intent(STEP_QUESTION) 보존
+- 일정11 조회 → 1건만 (일정10 대화 안 섞임 = 격리 확인)
+- 없는 일정(99) 조회 → 빈 배열 []
+- GENERAL 조회 → 1건
+
+
+8. 오류 테스트 결과 (거부 정상)
+----------------------------------------------------------------------
+- 잘못된 chatMode(WRONG) → ERROR 거부
+- 잘못된 sender(ROBOT)   → ERROR 거부
+- 빈 메시지("   ")       → ERROR 거부
+- SCHEDULE인데 scheduleId 없음 → ERROR 거부
+
+  ※ 자동 검증 스크립트로 완료기준 9개·테스트 9개 전 항목 통과 (PASS 17 / FAIL 0)
+  ※ 회귀: 로그인·기존 일정 조회·/analyze 정상(HTTP 200) — 다른 기능 영향 없음
+
+
+9. 아직 남아 있는 문제 / 다음 작업 (계획서 5.10 = 다음 주)
+----------------------------------------------------------------------
+- UserChatActivity 자동 저장 연결 (앱이 대화 시 이 API로 저장)
+- 보호자 대화 History 화면
+- 앱 재실행 후 대화 복원
+- DB 최근 대화를 조회해 Gemini에 전달
+- Agent / RAG
+  (모두 저장/조회 API가 안정화된 이후 연결 예정)
 
 ======================================================================
