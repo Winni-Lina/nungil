@@ -28,7 +28,7 @@
     </insert>
 
     <select id="findById" resultMap="ScheduleResultMap">
-        SELECT s.*, t.name AS task_name
+        SELECT s.*, t.name AS task_name, t.process AS task_process
         FROM SCHEDULE s
         LEFT JOIN TASK t ON s.task_id = t.task_id
         WHERE s.schedule_id = #{scheduleId}

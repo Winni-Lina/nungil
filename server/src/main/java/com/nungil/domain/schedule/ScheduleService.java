@@ -39,14 +39,16 @@ public class ScheduleService {
         System.out.println("[DB] SCHEDULE UPDATE status=completed, success_at=NOW (schedule_id=" + scheduleId + ")");
     }
 
-    public void updateScheduledAt(Long scheduleId, LocalDateTime scheduledAt) {
-        scheduleMapper.updateScheduledAt(scheduleId, scheduledAt);
-        System.out.println("[DB] SCHEDULE UPDATE scheduled_at=" + scheduledAt + " (schedule_id=" + scheduleId + ")");
+    public int updateScheduledAt(Long scheduleId, LocalDateTime scheduledAt) {
+        int rows = scheduleMapper.updateScheduledAt(scheduleId, scheduledAt);
+        System.out.println("[DB] SCHEDULE UPDATE scheduled_at=" + scheduledAt + " (schedule_id=" + scheduleId + ") → " + rows + "행 변경");
+        return rows;
     }
 
-    public void delete(Long scheduleId) {
-        scheduleMapper.deleteById(scheduleId);
-        System.out.println("[DB] SCHEDULE DELETE (schedule_id=" + scheduleId + ")");
+    public int delete(Long scheduleId) {
+        int rows = scheduleMapper.deleteById(scheduleId);
+        System.out.println("[DB] SCHEDULE DELETE (schedule_id=" + scheduleId + ") → " + rows + "행 삭제");
+        return rows;
     }
 
     public void updateStatus(Long scheduleId, String status) {
