@@ -52,18 +52,6 @@ import java.util.concurrent.TimeUnit
 
 class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListener {
 
-    companion object {
-        // Gemini 구조화 응답의 사용자 발화 의도 (서버 프롬프트와 동일한 5종)
-        private const val INTENT_DONE     = "STEP_DONE"
-        private const val INTENT_QUESTION = "STEP_QUESTION"
-        private const val INTENT_HELP     = "HELP_REQUEST"
-        private const val INTENT_OFF      = "OFF_TOPIC"
-        private const val INTENT_OTHER    = "OTHER"
-        private val ALLOWED_INTENTS = setOf(
-            INTENT_DONE, INTENT_QUESTION, INTENT_HELP, INTENT_OFF, INTENT_OTHER
-        )
-    }
-
     private val SERVER_URL = AppConfig.BASE_URL + "api/v1/question/analyze"
     private lateinit var USER_ID: String
     private var USER_IDX: Int = 1
@@ -394,16 +382,16 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     for (i in 0 until suggestArray.length()) suggests.add(suggestArray.getString(i))
                 }
 
-                val intent = normalizeIntent(result.optString("intent", ""))
+                val intent = IntentPolicy.normalize(result.optString("intent", ""))
                 val stepComplete = result.optBoolean("stepComplete", false)
-                val isDone = intent == INTENT_DONE
-                if (isDone != stepComplete) {
+                val isDone = IntentPolicy.shouldConfirmStep(intent)
+                if (IntentPolicy.isInconsistent(intent, stepComplete)) {
                     Log.w("ServerCheck", "intent/stepComplete 불일치 → intent 기준 처리 (intent=$intent, stepComplete=$stepComplete)")
                 }
 
                 // 질문 횟수: 질문·도움 요청·사진 요청만, 한 발화당 한 번만 증가
                 val shouldLogQuestion = isScheduleMode && currentScheduleId > 0 &&
-                    (intent == INTENT_QUESTION || intent == INTENT_HELP || photoRequest)
+                    IntentPolicy.shouldCountQuestion(intent, photoRequest)
                 if (shouldLogQuestion) ScheduleRepository.logQuestion(currentScheduleId.toLong())
 
                 addMsg(answer, UserChatMessage.TYPE_OTHER, false, null, suggests)
@@ -492,12 +480,6 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         awaitingStepConfirm = false
         try { stepConfirmDialog?.dismiss() } catch (_: Exception) {}
         stepConfirmDialog = null
-    }
-
-    /** 허용된 5개 값 외(null·공백·오타·소문자)는 모두 OTHER로 처리 */
-    private fun normalizeIntent(raw: String?): String {
-        val intent = raw?.trim()?.uppercase().orEmpty()
-        return if (intent in ALLOWED_INTENTS) intent else INTENT_OTHER
     }
 
     private fun startRecordingFlow(manual: Boolean) {
