@@ -65,13 +65,16 @@ public class ScheduleController {
 
             scheduleService.create(schedule);
 
-            // FCM으로 사용자 앱에 알림
-            String fcmToken = nungilUserService.getFcmToken(schedule.getId(), schedule.getIdx());
-            fcmService.sendScheduleUpdated(fcmToken);
-
             System.out.println("[결과] 일정 등록 완료 scheduleId=" + schedule.getScheduleId());
             response.put("status", "SUCCESS");
             response.put("message", "일정이 등록됐어요!");
+
+            try {
+                String fcmToken = nungilUserService.getFcmToken(schedule.getId(), schedule.getIdx());
+                fcmService.sendScheduleUpdated(fcmToken);
+            } catch (Exception fcmEx) {
+                System.out.println("[FCM] 알림 전송 실패 (일정 등록은 정상): " + fcmEx.getMessage());
+            }
         } catch (Exception e) {
             System.out.println("[ERROR] " + e.getMessage());
             response.put("status", "ERROR");
@@ -194,15 +197,19 @@ public class ScheduleController {
                 return response;
             }
 
-            ScheduleVO schedule = scheduleService.findById(scheduleId);
-            if (schedule != null) {
-                String fcmToken = nungilUserService.getFcmToken(schedule.getId(), schedule.getIdx());
-                fcmService.sendScheduleUpdated(fcmToken);
-            }
-
             System.out.println("[결과] 일정 시간 변경 완료");
             response.put("status", "SUCCESS");
             response.put("message", "시간이 변경됐어요!");
+
+            try {
+                ScheduleVO schedule = scheduleService.findById(scheduleId);
+                if (schedule != null) {
+                    String fcmToken = nungilUserService.getFcmToken(schedule.getId(), schedule.getIdx());
+                    fcmService.sendScheduleUpdated(fcmToken);
+                }
+            } catch (Exception fcmEx) {
+                System.out.println("[FCM] 알림 전송 실패 (시간 변경은 정상): " + fcmEx.getMessage());
+            }
         } catch (Exception e) {
             System.out.println("[ERROR] " + e.getMessage());
             response.put("status", "ERROR");

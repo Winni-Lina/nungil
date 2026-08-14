@@ -24,7 +24,11 @@
 
     <insert id="insert" parameterType="com.nungil.domain.schedule.ScheduleVO">
         INSERT INTO SCHEDULE (task_id, id, idx, status, scheduled_at, location, special_note, custom_steps)
-        VALUES (#{taskId}, #{id}, #{idx}, 'pending', #{scheduledAt}, #{location}, #{specialNote}, #{customSteps})
+        VALUES (#{taskId}, #{id}, #{idx}, 'pending',
+                #{scheduledAt, jdbcType=TIMESTAMP},
+                #{location, jdbcType=VARCHAR},
+                #{specialNote, jdbcType=VARCHAR},
+                #{customSteps, jdbcType=CLOB})
     </insert>
 
     <select id="findById" resultMap="ScheduleResultMap">
