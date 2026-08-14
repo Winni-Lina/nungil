@@ -52,6 +52,18 @@ import java.util.concurrent.TimeUnit
 
 class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListener {
 
+    companion object {
+        // Gemini 구조화 응답의 사용자 발화 의도 (서버 프롬프트와 동일한 5종)
+        private const val INTENT_DONE     = "STEP_DONE"
+        private const val INTENT_QUESTION = "STEP_QUESTION"
+        private const val INTENT_HELP     = "HELP_REQUEST"
+        private const val INTENT_OFF      = "OFF_TOPIC"
+        private const val INTENT_OTHER    = "OTHER"
+        private val ALLOWED_INTENTS = setOf(
+            INTENT_DONE, INTENT_QUESTION, INTENT_HELP, INTENT_OFF, INTENT_OTHER
+        )
+    }
+
     private val SERVER_URL = AppConfig.BASE_URL + "api/v1/question/analyze"
     private lateinit var USER_ID: String
     private var USER_IDX: Int = 1
@@ -85,6 +97,10 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private var sttFailCount = 0
     private var awaitingFallbackButton = false
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    // 완료 확인창: 중복 표시 방지 + 열려 있는 동안 자동 음성 인식 차단
+    private var stepConfirmDialog: AlertDialog? = null
+    private var awaitingStepConfirm = false
 
     private val refreshHandler = Handler(Looper.getMainLooper())
     private val refreshRunnable = object : Runnable {
@@ -199,6 +215,8 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
         btnMic.setOnClickListener {
             if (loadingBar.visibility == View.VISIBLE) return@setOnClickListener
+            // 완료 확인창 대기 중엔 버튼만 사용해야 하므로 마이크 탭 무시
+            if (awaitingStepConfirm) return@setOnClickListener
 
             when {
                 ttsManager.isSpeaking() -> {
@@ -221,6 +239,8 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private fun handleTtsEndFlow() {
         runOnUiThread {
             updateMicButtonUI(forceMic = true)
+            // 완료 확인창이 떠 있거나 뜰 예정이면 어떤 음성 인식도 시작하지 않는다
+            if (awaitingStepConfirm) return@runOnUiThread
             if (shouldLaunchCamera) {
                 shouldLaunchCamera = false
                 mainHandler.postDelayed({ openBackCamera() }, 300)
@@ -237,6 +257,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
     private fun startAutoScheduleListening() {
         if (!isScheduleMode || isRecording || loadingBar.visibility == View.VISIBLE) return
+        if (awaitingStepConfirm) return   // 완료 확인창 대기 중에는 마이크를 열지 않는다
         voskManager.stopListening()
         isRecording = true
         updateMicButtonUI()
@@ -324,7 +345,11 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 Log.e("ServerCheck", "네트워크 오류 발생: ${e.message}")
-                runOnUiThread { loadingBar.visibility = View.GONE; setBearMood(BearMood.BASIC); resetToIdleState() }
+                runOnUiThread {
+                    loadingBar.visibility = View.GONE
+                    setBearMood(BearMood.BASIC)
+                    showFallbackGuide()   // 현재 단계 유지 + 기본 안내
+                }
             }
 
             override fun onResponse(call: Call, response: Response) {
@@ -338,7 +363,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                         parseServerResponse(body)
                     } else {
                         Log.e("ServerCheck", "서버 응답 실패: ${response.code}")
-                        resetToIdleState()
+                        showFallbackGuide()
                     }
                 }
             }
@@ -369,59 +394,110 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     for (i in 0 until suggestArray.length()) suggests.add(suggestArray.getString(i))
                 }
 
-                val intent = result.optString("intent", "OTHER")
+                val intent = normalizeIntent(result.optString("intent", ""))
                 val stepComplete = result.optBoolean("stepComplete", false)
+                val isDone = intent == INTENT_DONE
+                if (isDone != stepComplete) {
+                    Log.w("ServerCheck", "intent/stepComplete 불일치 → intent 기준 처리 (intent=$intent, stepComplete=$stepComplete)")
+                }
 
-                // 질문 횟수: 실제 질문·도움 요청·사진 요청만 카운트 (완료 선언·잡담 제외)
+                // 질문 횟수: 질문·도움 요청·사진 요청만, 한 발화당 한 번만 증가
                 val shouldLogQuestion = isScheduleMode && currentScheduleId > 0 &&
-                    (intent == "STEP_QUESTION" || intent == "HELP_REQUEST" || photoRequest)
+                    (intent == INTENT_QUESTION || intent == INTENT_HELP || photoRequest)
                 if (shouldLogQuestion) ScheduleRepository.logQuestion(currentScheduleId.toLong())
 
                 addMsg(answer, UserChatMessage.TYPE_OTHER, false, null, suggests)
-                ttsManager.speak(answer)
 
-                // 완료 선언이면 자동 이동 대신 재확인 다이얼로그 표시
-                if (isScheduleMode && (intent == "STEP_DONE" || stepComplete)) {
+                // 완료 확인창은 intent=STEP_DONE 일 때만. stepComplete는 참고값으로만 쓴다.
+                // STEP_DONE을 받은 시점부터 확인창을 닫을 때까지 자동 음성 인식을 막는다.
+                if (isScheduleMode && isDone) {
+                    awaitingStepConfirm = true
+                    speechRecognizer?.cancel()
+                    isRecording = false
+                    voskManager.stopListening()
+                }
+                ttsManager.speak(answer)
+                if (isScheduleMode && isDone) {
                     mainHandler.postDelayed({ showStepConfirmDialog() }, 1400)
                 }
                 Log.d("ServerCheck", "파싱 완료 | intent=$intent stepComplete=$stepComplete")
             } else {
                 Log.e("ServerCheck", "서버 status 비정상: ${root.optString("status")}")
-                resetToIdleState()
+                showFallbackGuide()
             }
         } catch (e: Exception) {
             Log.e("ServerCheck", "JSON 파싱 에러: ${e.message}")
+            showFallbackGuide()
+        }
+    }
+
+    /** 서버·JSON·네트워크 오류 공통 처리 — 단계를 바꾸지 않고 기본 안내만 보여준다.
+     *  질문 횟수도 증가시키지 않는다. */
+    private fun showFallbackGuide() {
+        runOnUiThread {
+            val msg = "잠깐, 다시 한 번 말해줄래?"
+            addMsg(msg, UserChatMessage.TYPE_OTHER, false, null, null)
+            ttsManager.speak(msg)
             resetToIdleState()
         }
     }
 
-    /** 단계 완료 재확인 다이얼로그 — AI 판단과 실제 이동을 분리 */
+    /** 단계 완료 재확인 다이얼로그 — AI 판단과 실제 단계 이동을 분리한다.
+     *  이미 떠 있으면 다시 띄우지 않고, 각 버튼은 한 번만 동작한다. */
     private fun showStepConfirmDialog() {
-        if (!isScheduleMode) return
+        if (!isScheduleMode || isFinishing || isDestroyed) return
+        if (stepConfirmDialog?.isShowing == true) return   // 중복 표시 방지
+
         runOnUiThread {
+            if (!isScheduleMode || isFinishing || isDestroyed) return@runOnUiThread
+            if (stepConfirmDialog?.isShowing == true) return@runOnUiThread
+
+            awaitingStepConfirm = true
+            awaitingFallbackButton = false
+            speechRecognizer?.cancel()
+            isRecording = false
+            voskManager.stopListening()
+            updateMicButtonUI(forceMic = true)
+
             val step = scheduleSteps.getOrElse(currentStepIndex) { scheduleTitle }
-            androidx.appcompat.app.AlertDialog.Builder(this)
+            stepConfirmDialog = AlertDialog.Builder(this)
                 .setTitle("현재 단계를 모두 했나요?")
                 .setMessage(step)
                 .setPositiveButton("했어요") { _, _ ->
-                    awaitingFallbackButton = false
+                    dismissStepConfirm()
                     proceedToNextStep()
                 }
                 .setNeutralButton("아직이에요") { _, _ ->
-                    awaitingFallbackButton = false
-                    val msg = "괜찮아요, 천천히 해봐요."
+                    dismissStepConfirm()
+                    val msg = "괜찮아요. 천천히 해요. 다 하면 알려 주세요."
                     addMsg(msg, UserChatMessage.TYPE_OTHER, false, null, null)
-                    ttsManager.speak(msg)
+                    ttsManager.speak(msg)   // TTS 종료 후 handleTtsEndFlow가 음성 인식 재개
                 }
                 .setNegativeButton("도와주세요") { _, _ ->
-                    awaitingFallbackButton = false
+                    dismissStepConfirm()
+                    // 서버가 HELP_REQUEST로 분류 → 질문 횟수는 여기서 1회만 증가
                     val helpText = "도와주세요"
+                    voiceMsgIndex = -1
                     addMsg(helpText, UserChatMessage.TYPE_MINE, false, null, null)
                     uploadToServer(null, null, helpText)
                 }
                 .setCancelable(false)
-                .show()
+                .create()
+            stepConfirmDialog?.show()
         }
+    }
+
+    /** 확인창을 닫고 예약된 표시·차단 상태를 함께 정리한다 */
+    private fun dismissStepConfirm() {
+        awaitingStepConfirm = false
+        try { stepConfirmDialog?.dismiss() } catch (_: Exception) {}
+        stepConfirmDialog = null
+    }
+
+    /** 허용된 5개 값 외(null·공백·오타·소문자)는 모두 OTHER로 처리 */
+    private fun normalizeIntent(raw: String?): String {
+        val intent = raw?.trim()?.uppercase().orEmpty()
+        return if (intent in ALLOWED_INTENTS) intent else INTENT_OTHER
     }
 
     private fun startRecordingFlow(manual: Boolean) {
@@ -555,6 +631,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         isRecording = false
         shouldLaunchCamera = false
         updateMicButtonUI(forceMic = true)
+        if (awaitingStepConfirm) return   // 확인창 대기 중엔 웨이크워드도 재개하지 않는다
         runOnUiThread { if (::voskManager.isInitialized) voskManager.startListening() }
     }
 
@@ -643,6 +720,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         if (!isScheduleMode) return
         sttFailCount = 0
         awaitingFallbackButton = false
+        awaitingStepConfirm = false
         voiceMsgIndex = -1
         currentStepIndex++
         if (scheduleSteps.isEmpty() || currentStepIndex >= scheduleSteps.size) {
@@ -727,6 +805,8 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
     override fun onStop() {
         super.onStop()
+        // 화면을 벗어나면 예약된 확인창이 나중에 다시 뜨지 않도록 정리
+        dismissStepConfirm()
         if (::voskManager.isInitialized) voskManager.stopListening()
 
         // 리시버 해제
@@ -738,6 +818,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
     override fun onDestroy() {
         super.onDestroy()
+        dismissStepConfirm()
         mainHandler.removeCallbacksAndMessages(null)
         refreshHandler.removeCallbacksAndMessages(null) // 핸들러 완전 정리
         if (::voskManager.isInitialized) voskManager.stopListening()

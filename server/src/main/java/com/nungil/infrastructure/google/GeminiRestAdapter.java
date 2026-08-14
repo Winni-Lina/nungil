@@ -132,7 +132,9 @@ public class GeminiRestAdapter {
         requestBody.put("generationConfig", genConfig);
 
         try {
-            System.out.println("[Gemini] user:\n" + userMessage);
+            // 사용자 질문·특이사항·이전 대화 전체가 로그에 남지 않도록 길이만 기록
+            System.out.println("[Gemini] 요청 전송 | userMessage " + (userMessage != null ? userMessage.length() : 0)
+                    + "자, image=" + (base64Image != null && !base64Image.isEmpty()));
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(accessToken());
@@ -141,7 +143,7 @@ public class GeminiRestAdapter {
             Map<String, Object> response = restTemplate
                     .exchange(finalUrl, HttpMethod.POST, entity, Map.class).getBody();
             String result = parseResponse(response);
-            System.out.println("[Gemini] 응답:\n" + result);
+            System.out.println("[Gemini] 응답 수신 | " + (result != null ? result.length() : 0) + "자");
             return result;
         } catch (Exception e) {
             System.err.println("[Gemini Error] " + e.getMessage());
