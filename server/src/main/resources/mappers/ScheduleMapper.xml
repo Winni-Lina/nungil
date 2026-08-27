@@ -24,18 +24,22 @@
 
     <insert id="insert" parameterType="com.nungil.domain.schedule.ScheduleVO">
         INSERT INTO SCHEDULE (task_id, id, idx, status, scheduled_at, location, special_note, custom_steps)
-        VALUES (#{taskId}, #{id}, #{idx}, 'pending', #{scheduledAt}, #{location}, #{specialNote}, #{customSteps})
+        VALUES (#{taskId}, #{id}, #{idx}, 'pending',
+                #{scheduledAt, jdbcType=TIMESTAMP},
+                #{location, jdbcType=VARCHAR},
+                #{specialNote, jdbcType=VARCHAR},
+                #{customSteps, jdbcType=CLOB})
     </insert>
 
     <select id="findById" resultMap="ScheduleResultMap">
-        SELECT s.*, t.name AS task_name
+        SELECT s.*, t.name AS task_name, t.process AS task_process
         FROM SCHEDULE s
         LEFT JOIN TASK t ON s.task_id = t.task_id
         WHERE s.schedule_id = #{scheduleId}
     </select>
 
     <select id="findByUser" resultMap="ScheduleResultMap">
-        SELECT s.*, t.name AS task_name
+        SELECT s.*, t.name AS task_name, t.process AS task_process
         FROM SCHEDULE s
         LEFT JOIN TASK t ON s.task_id = t.task_id
         WHERE s.id = #{id} AND s.idx = #{idx}
@@ -54,10 +58,10 @@
         WHERE schedule_id = #{scheduleId}
     </update>
 
-    <!-- SC-007: 드래그로 시간 변경 (completed 제외한 모든 상태 허용) -->
+    <!-- SC-007: 드래그로 시간 변경 (예정 일정만 허용) -->
     <update id="updateScheduledAt">
         UPDATE SCHEDULE SET scheduled_at = #{scheduledAt}
-        WHERE schedule_id = #{scheduleId} AND status != 'completed'
+        WHERE schedule_id = #{scheduleId} AND status = 'pending'
     </update>
 
     <delete id="deleteById">

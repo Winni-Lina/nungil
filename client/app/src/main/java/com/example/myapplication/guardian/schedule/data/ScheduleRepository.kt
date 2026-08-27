@@ -50,14 +50,16 @@ class ScheduleRepository {
                             } else emptyList()
                             list.add(
                                 Schedule(
-                                    scheduleId  = obj.getInt("scheduleId"),
-                                    taskId      = obj.getInt("taskId"),
-                                    taskName    = obj.getString("taskName"),
-                                    status      = obj.getString("status"),
-                                    scheduledAt = DateParseUtil.parseScheduledAtIso(obj),
-                                    location    = obj.optString("location", ""),
-                                    specialNote = obj.optString("specialNote", ""),
-                                    taskProcess = steps
+                                    scheduleId    = obj.getInt("scheduleId"),
+                                    taskId        = obj.getInt("taskId"),
+                                    taskName      = obj.getString("taskName"),
+                                    status        = obj.getString("status"),
+                                    scheduledAt   = DateParseUtil.parseScheduledAtIso(obj),
+                                    location      = obj.optString("location", ""),
+                                    specialNote   = obj.optString("specialNote", ""),
+                                    taskProcess   = steps,
+                                    successAt     = DateParseUtil.parseOptionalDateIso(obj, "successAt"),
+                                    questionCount = obj.optInt("questionCount", 0)
                                 )
                             )
                         }

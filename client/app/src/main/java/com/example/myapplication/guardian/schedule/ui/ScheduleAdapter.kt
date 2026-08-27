@@ -56,8 +56,9 @@ class ScheduleAdapter(
         // 상태 뱃지
         val statusText = when (s.status) {
             "completed"   -> "완료"
-            "in_progress" -> "진행중"
+            "in_progress" -> "진행 중"
             "pending"     -> "예정"
+            "abandoned"   -> "포기"
             else          -> s.status
         }
         holder.tvStatus.text = statusText
@@ -66,21 +67,22 @@ class ScheduleAdapter(
             when (s.status) {
                 "completed"   -> R.drawable.bg_status_completed
                 "in_progress" -> R.drawable.bg_status_in_progress
+                "abandoned"   -> R.drawable.bg_status_abandoned
                 else          -> R.drawable.bg_status_pending
             }
         )
 
-        // completed 일정은 흐리게
-        holder.itemView.alpha = if (s.status == "completed") 0.65f else 1.0f
+        // completed·abandoned 일정은 흐리게
+        holder.itemView.alpha = if (s.status == "completed" || s.status == "abandoned") 0.65f else 1.0f
 
-        // 삭제·수정: pending만 가능
+        // 모든 상태는 눌러서 상세 내용을 확인할 수 있다. 수정·삭제는 pending만 가능(다이얼로그에서 구분)
+        holder.itemView.setOnClickListener { onEdit(s) }
         if (s.status == "pending") {
             holder.btnDelete.visibility = View.VISIBLE
             holder.btnDelete.setOnClickListener { onDelete(s) }
-            holder.itemView.setOnClickListener { onEdit(s) }
         } else {
             holder.btnDelete.visibility = View.INVISIBLE
-            holder.itemView.setOnClickListener(null)
+            holder.btnDelete.setOnClickListener(null)
         }
     }
 }

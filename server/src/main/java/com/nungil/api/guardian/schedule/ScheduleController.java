@@ -65,13 +65,16 @@ public class ScheduleController {
 
             scheduleService.create(schedule);
 
-            // FCM으로 사용자 앱에 알림
-            String fcmToken = nungilUserService.getFcmToken(schedule.getId(), schedule.getIdx());
-            fcmService.sendScheduleUpdated(fcmToken);
-
             System.out.println("[결과] 일정 등록 완료 scheduleId=" + schedule.getScheduleId());
             response.put("status", "SUCCESS");
             response.put("message", "일정이 등록됐어요!");
+
+            try {
+                String fcmToken = nungilUserService.getFcmToken(schedule.getId(), schedule.getIdx());
+                fcmService.sendScheduleUpdated(fcmToken);
+            } catch (Exception fcmEx) {
+                System.out.println("[FCM] 알림 전송 실패 (일정 등록은 정상): " + fcmEx.getMessage());
+            }
         } catch (Exception e) {
             System.out.println("[ERROR] " + e.getMessage());
             response.put("status", "ERROR");
@@ -186,17 +189,27 @@ public class ScheduleController {
         Map<String, Object> response = new HashMap<>();
         try {
             LocalDateTime scheduledAt = LocalDateTime.parse((String) body.get("scheduledAt"));
-            ScheduleVO schedule = scheduleService.findById(scheduleId);
-            scheduleService.updateScheduledAt(scheduleId, scheduledAt);
+            int rows = scheduleService.updateScheduledAt(scheduleId, scheduledAt);
 
-            if (schedule != null) {
-                String fcmToken = nungilUserService.getFcmToken(schedule.getId(), schedule.getIdx());
-                fcmService.sendScheduleUpdated(fcmToken);
+            if (rows == 0) {
+                response.put("status", "FAIL");
+                response.put("message", "예정 상태의 일정만 시간을 변경할 수 있어요.");
+                return response;
             }
 
             System.out.println("[결과] 일정 시간 변경 완료");
             response.put("status", "SUCCESS");
             response.put("message", "시간이 변경됐어요!");
+
+            try {
+                ScheduleVO schedule = scheduleService.findById(scheduleId);
+                if (schedule != null) {
+                    String fcmToken = nungilUserService.getFcmToken(schedule.getId(), schedule.getIdx());
+                    fcmService.sendScheduleUpdated(fcmToken);
+                }
+            } catch (Exception fcmEx) {
+                System.out.println("[FCM] 알림 전송 실패 (시간 변경은 정상): " + fcmEx.getMessage());
+            }
         } catch (Exception e) {
             System.out.println("[ERROR] " + e.getMessage());
             response.put("status", "ERROR");
@@ -232,7 +245,12 @@ public class ScheduleController {
         System.out.println("[API] DELETE /api/v1/guardian/schedules/" + scheduleId);
         Map<String, Object> response = new HashMap<>();
         try {
-            scheduleService.delete(scheduleId);
+            int rows = scheduleService.delete(scheduleId);
+            if (rows == 0) {
+                response.put("status", "FAIL");
+                response.put("message", "예정 상태의 일정만 삭제할 수 있어요.");
+                return response;
+            }
             System.out.println("[결과] 일정 삭제 완료");
             response.put("status", "SUCCESS");
             response.put("message", "일정이 삭제됐어요!");

@@ -55,6 +55,29 @@ object DateParseUtil {
         }
     } catch (e: Exception) { "" }
 
+    /**
+     * successAt처럼 null일 수 있는 날짜 필드 → ISO 문자열("yyyy-MM-dd'T'HH:mm:ss").
+     * 값이 없거나 null이면 빈 문자열을 반환한다.
+     */
+    fun parseOptionalDateIso(obj: JSONObject, key: String): String = try {
+        if (obj.isNull(key) || !obj.has(key)) {
+            ""
+        } else {
+            val raw = obj.get(key)
+            if (raw is String) {
+                raw
+            } else {
+                val arr   = obj.getJSONArray(key)
+                val year  = arr.getInt(0)
+                val month = arr.getInt(1)
+                val day   = arr.getInt(2)
+                val hour  = if (arr.length() > 3) arr.getInt(3) else 0
+                val min   = if (arr.length() > 4) arr.getInt(4) else 0
+                "%04d-%02d-%02dT%02d:%02d:00".format(year, month, day, hour, min)
+            }
+        }
+    } catch (e: Exception) { "" }
+
     // ── private helpers ──────────────────────────────────────────────────────
 
     private fun arrayToMillis(year: Int, month: Int, day: Int, hour: Int, min: Int, sec: Int): Long {
