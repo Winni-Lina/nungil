@@ -191,6 +191,14 @@
                         android:textSize="13sp"
                         style="@style/Widget.Material3.Chip.Filter"/>
 
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipAbandoned"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="포기"
+                        android:textSize="13sp"
+                        style="@style/Widget.Material3.Chip.Filter"/>
+
                 </com.google.android.material.chip.ChipGroup>
 
             </LinearLayout>

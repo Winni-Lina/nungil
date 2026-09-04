@@ -44,6 +44,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -85,6 +86,10 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private var sttFailCount = 0
     private var awaitingFallbackButton = false
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    // 완료 확인창: 중복 표시 방지 + 열려 있는 동안 자동 음성 인식 차단
+    private var stepConfirmDialog: AlertDialog? = null
+    private var awaitingStepConfirm = false
 
     private val refreshHandler = Handler(Looper.getMainLooper())
     private val refreshRunnable = object : Runnable {
@@ -152,7 +157,15 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         val welcomeMsg = "안녕! 나는 똘똘이야. 뭐든 물어봐!"
         addMsg(welcomeMsg, UserChatMessage.TYPE_OTHER, false, null, mutableListOf("오늘 날씨 어때?", "넌 누구니?"))
         conversationHistory.add(UserChatLog("model", welcomeMsg))
+        saveChatMessage("ASSISTANT", welcomeMsg)
         mainHandler.postDelayed({ ttsManager.speak(welcomeMsg) }, 1000)
+
+        // 앱 재실행 후에도 Gemini가 이전 자유대화 맥락을 참고하도록 DB에서 최근 대화 복원
+        fetchChatHistory("GENERAL", null) { restored ->
+            if (restored.isNotEmpty()) {
+                runOnUiThread { conversationHistory.addAll(0, restored) }
+            }
+        }
 
         loadUserDataFromDB()
         handleScheduleIntent(intent)
@@ -199,6 +212,8 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
         btnMic.setOnClickListener {
             if (loadingBar.visibility == View.VISIBLE) return@setOnClickListener
+            // 완료 확인창 대기 중엔 버튼만 사용해야 하므로 마이크 탭 무시
+            if (awaitingStepConfirm) return@setOnClickListener
 
             when {
                 ttsManager.isSpeaking() -> {
@@ -221,6 +236,8 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private fun handleTtsEndFlow() {
         runOnUiThread {
             updateMicButtonUI(forceMic = true)
+            // 완료 확인창이 떠 있거나 뜰 예정이면 어떤 음성 인식도 시작하지 않는다
+            if (awaitingStepConfirm) return@runOnUiThread
             if (shouldLaunchCamera) {
                 shouldLaunchCamera = false
                 mainHandler.postDelayed({ openBackCamera() }, 300)
@@ -237,6 +254,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
     private fun startAutoScheduleListening() {
         if (!isScheduleMode || isRecording || loadingBar.visibility == View.VISIBLE) return
+        if (awaitingStepConfirm) return   // 완료 확인창 대기 중에는 마이크를 열지 않는다
         voskManager.stopListening()
         isRecording = true
         updateMicButtonUI()
@@ -287,7 +305,10 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         }
 
         // 히스토리에 현재 질문 추가 (순수 대화 내용만)
-        if (text != null) conversationHistory.add(UserChatLog("user", text))
+        if (text != null) {
+            conversationHistory.add(UserChatLog("user", text))
+            saveChatMessage("USER", text)
+        }
 
         val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
         val textMt = "text/plain; charset=utf-8".toMediaTypeOrNull()
@@ -324,12 +345,16 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 Log.e("ServerCheck", "네트워크 오류 발생: ${e.message}")
-                runOnUiThread { loadingBar.visibility = View.GONE; setBearMood(BearMood.BASIC); resetToIdleState() }
+                runOnUiThread {
+                    loadingBar.visibility = View.GONE
+                    setBearMood(BearMood.BASIC)
+                    showFallbackGuide()   // 현재 단계 유지 + 기본 안내
+                }
             }
 
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string() ?: ""
-                Log.d("ServerCheck", "── 서버 응답 수신 ──\n코드: ${response.code}\n본문: $body\n──────────────────")
+                Log.d("ServerCheck", "서버 응답 수신 | 코드: ${response.code}, 길이: ${body.length}자")
 
                 runOnUiThread {
                     loadingBar.visibility = View.GONE
@@ -338,7 +363,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                         parseServerResponse(body)
                     } else {
                         Log.e("ServerCheck", "서버 응답 실패: ${response.code}")
-                        resetToIdleState()
+                        showFallbackGuide()
                     }
                 }
             }
@@ -350,21 +375,20 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
             val root = JSONObject(json)
             if (root.optString("status") == "SUCCESS") {
                 val result = root.getJSONObject("result")
-                shouldLaunchCamera = result.optBoolean("photoRequest", false)
+                val photoRequest = result.optBoolean("photoRequest", false)
+                shouldLaunchCamera = photoRequest
 
-                // transcribedText는 화면 표시만 (히스토리 추가는 uploadToServer에서 이미 처리됨 → 중복 방지)
                 val transcribed = result.optString("transcribedText", "")
-                if (transcribed.isNotEmpty()) {
-                    updateVoiceStatus(transcribed)
-                }
+                if (transcribed.isNotEmpty()) updateVoiceStatus(transcribed)
 
-                // answer 세척: 서버 1차 방어에 더해, 펜스/이중 JSON이 남아있을 경우 한 번 더 정리
                 var answer = result.optString("answer", "")
                     .replace("```json", "").replace("```", "").trim()
                 if (answer.startsWith("{") && answer.contains("\"answer\"")) {
                     try { answer = JSONObject(answer).optString("answer", answer).trim() } catch (_: Exception) {}
                 }
+                val intent = IntentPolicy.normalize(result.optString("intent", ""))
                 conversationHistory.add(UserChatLog("model", answer))
+                saveChatMessage("ASSISTANT", answer, intent)
 
                 val suggestArray = result.optJSONArray("suggestedQuestions")
                 val suggests = mutableListOf<String?>()
@@ -373,26 +397,103 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                 }
 
                 val stepComplete = result.optBoolean("stepComplete", false)
+                val isDone = IntentPolicy.shouldConfirmStep(intent)
+                if (IntentPolicy.isInconsistent(intent, stepComplete)) {
+                    Log.w("ServerCheck", "intent/stepComplete 불일치 → intent 기준 처리 (intent=$intent, stepComplete=$stepComplete)")
+                }
 
-                if (currentScheduleId > 0) ScheduleRepository.logQuestion(currentScheduleId.toLong())
+                // 질문 횟수: 질문·도움 요청·사진 요청만, 한 발화당 한 번만 증가
+                val shouldLogQuestion = isScheduleMode && currentScheduleId > 0 &&
+                    IntentPolicy.shouldCountQuestion(intent, photoRequest)
+                if (shouldLogQuestion) ScheduleRepository.logQuestion(currentScheduleId.toLong())
 
                 addMsg(answer, UserChatMessage.TYPE_OTHER, false, null, suggests)
-                ttsManager.speak(answer)
 
-                // 단계 완료 판단은 서버 stepComplete 단일 소유 → 칭찬을 들려준 뒤 자동으로 다음 단계 진행
-                if (isScheduleMode && stepComplete) {
-                    mainHandler.postDelayed({ proceedToNextStep() }, 1200)
+                // 완료 확인창은 intent=STEP_DONE 일 때만. stepComplete는 참고값으로만 쓴다.
+                // STEP_DONE을 받은 시점부터 확인창을 닫을 때까지 자동 음성 인식을 막는다.
+                if (isScheduleMode && isDone) {
+                    awaitingStepConfirm = true
+                    speechRecognizer?.cancel()
+                    isRecording = false
+                    voskManager.stopListening()
                 }
-                Log.d("ServerCheck", "파싱 및 화면 업데이트 성공")
+                ttsManager.speak(answer)
+                if (isScheduleMode && isDone) {
+                    mainHandler.postDelayed({ showStepConfirmDialog() }, 1400)
+                }
+                Log.d("ServerCheck", "파싱 완료 | intent=$intent stepComplete=$stepComplete")
             } else {
-                Log.e("ServerCheck", "서버 status가 SUCCESS가 아님: ${root.optString("status")}")
-                resetToIdleState()
+                Log.e("ServerCheck", "서버 status 비정상: ${root.optString("status")}")
+                showFallbackGuide()
             }
         } catch (e: Exception) {
-            Log.e("ServerCheck", "JSON 파싱 중 에러 발생: ${e.message}")
-            e.printStackTrace()
+            Log.e("ServerCheck", "JSON 파싱 에러: ${e.message}")
+            showFallbackGuide()
+        }
+    }
+
+    /** 서버·JSON·네트워크 오류 공통 처리 — 단계를 바꾸지 않고 기본 안내만 보여준다.
+     *  질문 횟수도 증가시키지 않는다. */
+    private fun showFallbackGuide() {
+        runOnUiThread {
+            val msg = "잠깐, 다시 한 번 말해줄래?"
+            addMsg(msg, UserChatMessage.TYPE_OTHER, false, null, null)
+            ttsManager.speak(msg)
             resetToIdleState()
         }
+    }
+
+    /** 단계 완료 재확인 다이얼로그 — AI 판단과 실제 단계 이동을 분리한다.
+     *  이미 떠 있으면 다시 띄우지 않고, 각 버튼은 한 번만 동작한다. */
+    private fun showStepConfirmDialog() {
+        if (!isScheduleMode || isFinishing || isDestroyed) return
+        if (stepConfirmDialog?.isShowing == true) return   // 중복 표시 방지
+
+        runOnUiThread {
+            if (!isScheduleMode || isFinishing || isDestroyed) return@runOnUiThread
+            if (stepConfirmDialog?.isShowing == true) return@runOnUiThread
+
+            awaitingStepConfirm = true
+            awaitingFallbackButton = false
+            speechRecognizer?.cancel()
+            isRecording = false
+            voskManager.stopListening()
+            updateMicButtonUI(forceMic = true)
+
+            val step = scheduleSteps.getOrElse(currentStepIndex) { scheduleTitle }
+            stepConfirmDialog = AlertDialog.Builder(this)
+                .setTitle("현재 단계를 모두 했나요?")
+                .setMessage(step)
+                .setPositiveButton("했어요") { _, _ ->
+                    dismissStepConfirm()
+                    proceedToNextStep()
+                }
+                .setNeutralButton("아직이에요") { _, _ ->
+                    dismissStepConfirm()
+                    val msg = "괜찮아요. 천천히 해요. 다 하면 알려 주세요."
+                    addMsg(msg, UserChatMessage.TYPE_OTHER, false, null, null)
+                    saveChatMessage("ASSISTANT", msg)
+                    ttsManager.speak(msg)   // TTS 종료 후 handleTtsEndFlow가 음성 인식 재개
+                }
+                .setNegativeButton("도와주세요") { _, _ ->
+                    dismissStepConfirm()
+                    // 서버가 HELP_REQUEST로 분류 → 질문 횟수는 여기서 1회만 증가
+                    val helpText = "도와주세요"
+                    voiceMsgIndex = -1
+                    addMsg(helpText, UserChatMessage.TYPE_MINE, false, null, null)
+                    uploadToServer(null, null, helpText)
+                }
+                .setCancelable(false)
+                .create()
+            stepConfirmDialog?.show()
+        }
+    }
+
+    /** 확인창을 닫고 예약된 표시·차단 상태를 함께 정리한다 */
+    private fun dismissStepConfirm() {
+        awaitingStepConfirm = false
+        try { stepConfirmDialog?.dismiss() } catch (_: Exception) {}
+        stepConfirmDialog = null
     }
 
     private fun startRecordingFlow(manual: Boolean) {
@@ -526,6 +627,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         isRecording = false
         shouldLaunchCamera = false
         updateMicButtonUI(forceMic = true)
+        if (awaitingStepConfirm) return   // 확인창 대기 중엔 웨이크워드도 재개하지 않는다
         runOnUiThread { if (::voskManager.isInitialized) voskManager.startListening() }
     }
 
@@ -578,13 +680,52 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         currentStepIndex = 0
         Thread {
             val (steps, note) = ScheduleRepository.fetchStepsByScheduleId(currentScheduleId, USER_ID, USER_IDX)
-            runOnUiThread {
-                scheduleSteps = steps
-                scheduleNote = note
-                android.util.Log.d("ScheduleDebug", "단계 로드: ${steps.size}개 → $steps")
-                sendSchedulePromptToAI()
+            // 이 일정으로 이전에 나눈 대화가 있으면 복원해 Gemini가 맥락을 참고하도록 한다
+            fetchChatHistory("SCHEDULE", currentScheduleId) { restored ->
+                runOnUiThread {
+                    scheduleSteps = steps
+                    scheduleNote = note
+                    if (restored.isNotEmpty()) conversationHistory.addAll(0, restored)
+                    android.util.Log.d("ScheduleDebug", "단계 로드: ${steps.size}개 → $steps")
+                    sendSchedulePromptToAI()
+                }
             }
         }.start()
+    }
+
+    /** guardianId/userIdx + chatMode(+scheduleId) 기준으로 서버 CHAT_HISTORY에서 과거 대화를 조회한다. */
+    private fun fetchChatHistory(chatMode: String, scheduleId: Int?, onResult: (List<UserChatLog>) -> Unit) {
+        val urlBuilder = (AppConfig.BASE_URL + "api/v1/chat-history").toHttpUrl().newBuilder()
+            .addQueryParameter("guardianId", USER_ID)
+            .addQueryParameter("userIdx", USER_IDX.toString())
+            .addQueryParameter("chatMode", chatMode)
+        if (scheduleId != null) urlBuilder.addQueryParameter("scheduleId", scheduleId.toString())
+        val request = Request.Builder().url(urlBuilder.build()).get().build()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("ChatHistory", "조회 실패: ${e.message}")
+                onResult(emptyList())
+            }
+            override fun onResponse(call: Call, response: Response) {
+                try {
+                    val root = JSONObject(response.body?.string() ?: "")
+                    if (root.optString("status") != "SUCCESS") {
+                        onResult(emptyList())
+                        return
+                    }
+                    val arr = root.optJSONArray("messages") ?: JSONArray()
+                    val list = (0 until arr.length()).map { i ->
+                        val obj = arr.getJSONObject(i)
+                        val role = if (obj.optString("sender") == "ASSISTANT") "model" else "user"
+                        UserChatLog(role, obj.optString("message", ""))
+                    }
+                    onResult(list)
+                } catch (e: Exception) {
+                    Log.e("ChatHistory", "조회 응답 파싱 실패: ${e.message}")
+                    onResult(emptyList())
+                }
+            }
+        })
     }
 
     private fun sendSchedulePromptToAI() {
@@ -614,6 +755,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         if (!isScheduleMode) return
         sttFailCount = 0
         awaitingFallbackButton = false
+        awaitingStepConfirm = false
         voiceMsgIndex = -1
         currentStepIndex++
         if (scheduleSteps.isEmpty() || currentStepIndex >= scheduleSteps.size) {
@@ -626,6 +768,8 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private fun finishSchedule() {
         ScheduleRepository.completeSchedule(currentScheduleId)
         val finishedTitle = scheduleTitle
+        val finishedScheduleId = currentScheduleId
+        val finishedStepIndex = currentStepIndex
         val historyJson = gson.toJson(conversationHistory)
         currentStepIndex = -1; currentScheduleId = -1
         setBearMood(BearMood.PRAISE)
@@ -642,10 +786,52 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     chatList[summaryMsgIndex].content = summary
                     adapter.notifyItemChanged(summaryMsgIndex)
                     conversationHistory.add(UserChatLog("model", summary))
+                    saveChatMessage(
+                        "ASSISTANT", summary,
+                        chatMode = "SCHEDULE",
+                        scheduleId = finishedScheduleId,
+                        stepIndex = finishedStepIndex
+                    )
                     ttsManager.speak(summary)
                 }
             }
         }
+    }
+
+    /** 대화 1건을 서버 CHAT_HISTORY 테이블에 비동기로 저장한다 (실패해도 화면 흐름은 막지 않음). */
+    private fun saveChatMessage(
+        sender: String,
+        message: String,
+        intent: String? = null,
+        chatMode: String = if (isScheduleMode) "SCHEDULE" else "GENERAL",
+        scheduleId: Int = currentScheduleId,
+        stepIndex: Int = currentStepIndex
+    ) {
+        if (message.isBlank()) return
+        val bodyJson = JSONObject().apply {
+            put("guardianId", USER_ID)
+            put("userIdx", USER_IDX)
+            if (chatMode == "SCHEDULE") {
+                put("scheduleId", scheduleId)
+                put("stepIndex", stepIndex)
+            }
+            put("chatMode", chatMode)
+            put("sender", sender)
+            put("message", message)
+            if (intent != null) put("intent", intent)
+        }.toString()
+        val request = Request.Builder()
+            .url(AppConfig.BASE_URL + "api/v1/chat-history")
+            .post(bodyJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+            .build()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("ChatHistory", "저장 실패: ${e.message}")
+            }
+            override fun onResponse(call: Call, response: Response) {
+                response.close()
+            }
+        })
     }
 
     /** 서버에 완료 요약 요청 */
@@ -698,6 +884,8 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
     override fun onStop() {
         super.onStop()
+        // 화면을 벗어나면 예약된 확인창이 나중에 다시 뜨지 않도록 정리
+        dismissStepConfirm()
         if (::voskManager.isInitialized) voskManager.stopListening()
 
         // 리시버 해제
@@ -709,6 +897,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
     override fun onDestroy() {
         super.onDestroy()
+        dismissStepConfirm()
         mainHandler.removeCallbacksAndMessages(null)
         refreshHandler.removeCallbacksAndMessages(null) // 핸들러 완전 정리
         if (::voskManager.isInitialized) voskManager.stopListening()

@@ -43,7 +43,7 @@ class ScheduleFragment : Fragment() {
     private var selectedHour   = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     private var selectedMinute = 0
 
-    // 필터 칩: "all" | "pending" | "completed"
+    // 필터 칩: "all" | "pending" | "completed" | "abandoned"
     private var currentFilter = "all"
 
     override fun onCreateView(
@@ -88,9 +88,10 @@ class ScheduleFragment : Fragment() {
         // 필터 칩
         chipGroup.setOnCheckedStateChangeListener { _, checkedIds ->
             currentFilter = when {
-                checkedIds.contains(R.id.chipPending)  -> "pending"
-                checkedIds.contains(R.id.chipDone)     -> "completed"
-                else                                   -> "all"
+                checkedIds.contains(R.id.chipPending)   -> "pending"
+                checkedIds.contains(R.id.chipDone)      -> "completed"
+                checkedIds.contains(R.id.chipAbandoned) -> "abandoned"
+                else                                    -> "all"
             }
             refreshDateDisplay()
         }
@@ -158,6 +159,7 @@ class ScheduleFragment : Fragment() {
         val filtered = when (currentFilter) {
             "pending"   -> daySchedules.filter { it.status == "pending" || it.status == "in_progress" }
             "completed" -> daySchedules.filter { it.status == "completed" }
+            "abandoned" -> daySchedules.filter { it.status == "abandoned" }
             else        -> daySchedules
         }
 
@@ -165,6 +167,7 @@ class ScheduleFragment : Fragment() {
         val filterLabel = when (currentFilter) {
             "pending"   -> "예정 ${filtered.size}개"
             "completed" -> "완료 ${filtered.size}개"
+            "abandoned" -> "포기 ${filtered.size}개"
             else        -> "일정 ${count}개"
         }
         tvScheduleHeader.text = "${displayDateFmt.format(currentCal.time)} $filterLabel"
@@ -187,7 +190,24 @@ class ScheduleFragment : Fragment() {
             .show()
     }
 
-    // SM-002: 일정 상세 보기 + 수정
+    private fun statusLabel(status: String): String = when (status) {
+        "pending"     -> "예정"
+        "in_progress" -> "진행 중"
+        "completed"   -> "완료"
+        "abandoned"   -> "포기"
+        else          -> status
+    }
+
+    /** successAt("yyyy-MM-ddTHH:mm:ss" 또는 "") → "yyyy-MM-dd HH:mm" 또는 완료 전이면 "-" */
+    private fun formatSuccessAt(successAt: String): String {
+        if (successAt.isBlank()) return "-"
+        val parts = successAt.split("T")
+        val datePart = parts.getOrElse(0) { "" }
+        val timePart = parts.getOrElse(1) { "" }.take(5)
+        return if (timePart.isNotEmpty()) "$datePart $timePart" else datePart.ifEmpty { "-" }
+    }
+
+    // SM-002: 일정 상세 보기 (모든 상태) + 시간 수정 (예정 일정만)
     private fun showEditDialog(schedule: Schedule) {
         val parts = schedule.scheduledAt.split("T")
         val currentDate = parts.getOrElse(0) { filterDateFmt.format(Calendar.getInstance().time) }
@@ -197,8 +217,10 @@ class ScheduleFragment : Fragment() {
         var editDate    = currentDate
 
         val sb = StringBuilder()
-        sb.append("📅 날짜: $editDate\n")
-        sb.append("⏰ 시간: %02d:%02d\n".format(editHour, editMinute))
+        sb.append("상태: ${statusLabel(schedule.status)}\n")
+        sb.append("📅 예정 시간: $currentDate %02d:%02d\n".format(editHour, editMinute))
+        sb.append("✅ 완료 시간: ${formatSuccessAt(schedule.successAt)}\n")
+        sb.append("❓ 질문 횟수: ${schedule.questionCount}회\n")
         if (schedule.location.isNotBlank()) sb.append("📍 장소: ${schedule.location}\n")
         if (schedule.specialNote.isNotBlank()) sb.append("📝 메모: ${schedule.specialNote}\n")
         if (schedule.taskProcess.isNotEmpty()) {
@@ -206,25 +228,33 @@ class ScheduleFragment : Fragment() {
             schedule.taskProcess.forEachIndexed { i, step -> sb.append("  ${i + 1}. $step\n") }
         }
 
-        AlertDialog.Builder(requireContext())
+        val builder = AlertDialog.Builder(requireContext())
             .setTitle(schedule.taskName)
             .setMessage(sb.toString())
-            .setNeutralButton("날짜/시간 변경") { _, _ ->
-                val cal = Calendar.getInstance()
-                DatePickerDialog(requireContext(), { _, y, m, d ->
-                    editDate = "%04d-%02d-%02d".format(y, m + 1, d)
+
+        // 예정 일정만 시간 수정이 가능하다. 완료·포기·진행 중 일정은 상세 보기만 가능하다.
+        if (schedule.status == "pending") {
+            builder
+                .setNeutralButton("날짜/시간 변경") { _, _ ->
+                    val cal = Calendar.getInstance()
+                    DatePickerDialog(requireContext(), { _, y, m, d ->
+                        editDate = "%04d-%02d-%02d".format(y, m + 1, d)
+                        pickTime(editHour, editMinute) { h, min ->
+                            viewModel.updateScheduleTime(schedule.scheduleId, editDate, "%02d:%02d".format(h, min))
+                        }
+                    }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+                }
+                .setPositiveButton("시간만 변경") { _, _ ->
                     pickTime(editHour, editMinute) { h, min ->
                         viewModel.updateScheduleTime(schedule.scheduleId, editDate, "%02d:%02d".format(h, min))
                     }
-                }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
-            }
-            .setPositiveButton("시간만 변경") { _, _ ->
-                pickTime(editHour, editMinute) { h, min ->
-                    viewModel.updateScheduleTime(schedule.scheduleId, editDate, "%02d:%02d".format(h, min))
                 }
-            }
-            .setNegativeButton("닫기", null)
-            .show()
+                .setNegativeButton("닫기", null)
+        } else {
+            builder.setPositiveButton("닫기", null)
+        }
+
+        builder.show()
     }
 
     /** 오전/오후 + 시 + 분 휠 선택기. hour는 0~23로 콜백 */

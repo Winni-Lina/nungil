@@ -96,6 +96,93 @@ class AnalysisOrchestratorTest {
         assertTrue(geminiStub.lastUser.contains("질문"));
     }
 
+    // ── Intent 검증 ─────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("execute_Gemini가_5종Intent를_반환하면_그대로_유지")
+    void execute_허용된intent_유지() {
+        for (String intent : new String[]{
+                "STEP_DONE", "STEP_QUESTION", "HELP_REQUEST", "OFF_TOPIC", "OTHER"}) {
+            geminiStub.responseToReturn =
+                    "{\"intent\":\"" + intent + "\",\"answer\":\"네\","
+                    + "\"stepComplete\":false,\"suggestedQuestions\":[],\"photoRequest\":false}";
+            Map<String, Object> result = execSchedule("발화");
+            assertEquals(intent, result.get("intent"), intent + "은 그대로 유지되어야 함");
+        }
+    }
+
+    @Test
+    @DisplayName("execute_intent가_없거나_null이면_OTHER로_처리")
+    void execute_intent없음_OTHER() {
+        // intent 필드 자체가 없는 경우
+        geminiStub.responseToReturn =
+                "{\"answer\":\"네\",\"stepComplete\":false,\"suggestedQuestions\":[],\"photoRequest\":false}";
+        assertEquals("OTHER", execSchedule("발화").get("intent"));
+
+        // intent가 JSON null인 경우
+        geminiStub.responseToReturn =
+                "{\"intent\":null,\"answer\":\"네\",\"stepComplete\":false,"
+                + "\"suggestedQuestions\":[],\"photoRequest\":false}";
+        assertEquals("OTHER", execSchedule("발화").get("intent"));
+    }
+
+    @Test
+    @DisplayName("execute_빈문자열_공백_허용외값은_모두_OTHER로_처리")
+    void execute_잘못된intent_OTHER() {
+        for (String bad : new String[]{"", "   ", "STEP_UNKNOWN", "완료", "123"}) {
+            geminiStub.responseToReturn =
+                    "{\"intent\":\"" + bad + "\",\"answer\":\"네\",\"stepComplete\":false,"
+                    + "\"suggestedQuestions\":[],\"photoRequest\":false}";
+            assertEquals("OTHER", execSchedule("발화").get("intent"),
+                    "허용되지 않은 값 [" + bad + "]은 OTHER여야 함");
+        }
+    }
+
+    @Test
+    @DisplayName("execute_소문자_공백포함_intent는_정규화되어_인식")
+    void execute_소문자intent_정규화() {
+        geminiStub.responseToReturn =
+                "{\"intent\":\" step_done \",\"answer\":\"잘했어요\",\"stepComplete\":true,"
+                + "\"suggestedQuestions\":[],\"photoRequest\":false}";
+        assertEquals("STEP_DONE", execSchedule("다 했어").get("intent"));
+    }
+
+    @Test
+    @DisplayName("execute_Gemini응답이_깨진JSON이면_intent_OTHER_stepComplete_false_반환")
+    void execute_깨진JSON_기본값반환() {
+        geminiStub.responseToReturn = "이건 JSON이 아님";
+        Map<String, Object> result = execSchedule("발화");
+        assertEquals("OTHER", result.get("intent"), "파싱 실패 시 intent는 OTHER");
+        assertEquals(false, result.get("stepComplete"), "파싱 실패 시 stepComplete는 false");
+        assertNotNull(result.get("answer"), "기본 안내 문구가 있어야 함");
+    }
+
+    @Test
+    @DisplayName("일정_프롬프트에_5종_Intent와_stepComplete_기준이_명시됨")
+    void buildSchedulePrompt_intent규칙_포함() throws Exception {
+        Method m = AnalysisOrchestrator.class.getDeclaredMethod(
+                "buildSchedulePrompt", String.class, String.class, String.class,
+                String.class, String.class, int.class, int.class, String.class);
+        m.setAccessible(true);
+        String system = ((String[]) m.invoke(orchestrator,
+                "사용자정보", "[]", "안녕", "빨래하기", "세제 넣기", 1, 5, ""))[0];
+
+        for (String intent : new String[]{
+                "STEP_DONE", "STEP_QUESTION", "HELP_REQUEST", "OFF_TOPIC", "OTHER"}) {
+            assertTrue(system.contains(intent), "system 프롬프트에 " + intent + " 명시 필요");
+        }
+        assertTrue(system.contains("stepComplete는 intent=STEP_DONE일 때만 true"),
+                "stepComplete 기준이 프롬프트에 명시되어야 함");
+    }
+
+    /** schedule 모드 execute 호출 헬퍼 */
+    private Map<String, Object> execSchedule(String question) {
+        return orchestrator.execute(
+                "user1", "[]", "사용자정보", null, null,
+                question, "schedule", "빨래하기", "세제 넣기", 1, 5,
+                "", "[\"빨래모으기\",\"세제넣기\"]");
+    }
+
     // ── Stubs ──────────────────────────────
     static class StubGeminiAdapter extends GeminiRestAdapter {
         int callCount = 0;

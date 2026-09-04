@@ -270,7 +270,7 @@ public class NungilUserController {
     public Map<String, Object> saveProfile(@PathVariable("guardianId") String guardianId,
                                             @PathVariable("idx") int idx,
                                             @RequestBody Map<String, Object> body) {
-        System.out.println("[API] POST /api/v1/guardian/settings/user/" + guardianId + "/" + idx + "/profile | specialNote=" + body.get("specialNote"));
+        System.out.println("[API] POST /api/v1/guardian/settings/user/" + guardianId + "/" + idx + "/profile");
         Map<String, Object> response = new HashMap<>();
         try {
             String specialNote = (String) body.get("specialNote");
@@ -313,7 +313,7 @@ public class NungilUserController {
             result.put("specialNote", user.getSpecialNote());
             result.put("whiteList", parseWhiteListToItems(user.getWhiteList()));
 
-            System.out.println("[결과] 사용자 조회 완료 specialNote=" + user.getSpecialNote());
+            System.out.println("[결과] 사용자 조회 완료 guardianId=" + guardianId + ", idx=" + idx);
             response.put("status", "SUCCESS");
             response.put("result", result);
         } catch (Exception e) {

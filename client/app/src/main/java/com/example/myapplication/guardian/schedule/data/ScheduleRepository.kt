@@ -6,6 +6,7 @@ import com.example.myapplication.core.network.Session
 import com.example.myapplication.core.util.DateParseUtil
 import com.example.myapplication.model.Schedule
 import com.example.myapplication.model.Task
+import org.json.JSONArray
 import org.json.JSONObject
 
 class ScheduleRepository {
@@ -44,20 +45,19 @@ class ScheduleRepository {
                         val list = mutableListOf<Schedule>()
                         for (i in 0 until arr.length()) {
                             val obj = arr.getJSONObject(i)
-                            val stepsArr = obj.optJSONArray("taskProcess")
-                            val steps = if (stepsArr != null) {
-                                (0 until stepsArr.length()).map { stepsArr.getString(it) }
-                            } else emptyList()
+                            val steps = parseStepField(obj, "taskProcess")
                             list.add(
                                 Schedule(
-                                    scheduleId  = obj.getInt("scheduleId"),
-                                    taskId      = obj.getInt("taskId"),
-                                    taskName    = obj.getString("taskName"),
-                                    status      = obj.getString("status"),
-                                    scheduledAt = DateParseUtil.parseScheduledAtIso(obj),
-                                    location    = obj.optString("location", ""),
-                                    specialNote = obj.optString("specialNote", ""),
-                                    taskProcess = steps
+                                    scheduleId    = obj.getInt("scheduleId"),
+                                    taskId        = obj.getInt("taskId"),
+                                    taskName      = obj.getString("taskName"),
+                                    status        = obj.getString("status"),
+                                    scheduledAt   = DateParseUtil.parseScheduledAtIso(obj),
+                                    location      = obj.optString("location", ""),
+                                    specialNote   = obj.optString("specialNote", ""),
+                                    taskProcess   = steps,
+                                    successAt     = DateParseUtil.parseOptionalDateIso(obj, "successAt"),
+                                    questionCount = obj.optInt("questionCount", 0)
                                 )
                             )
                         }
@@ -76,6 +76,23 @@ class ScheduleRepository {
     }
 
     // scheduledAt 파싱은 DateParseUtil.parseScheduledAtIso() 참조
+
+    // 필드가 JSON 배열 / JSON 배열 문자열(CLOB) / 줄바꿈 텍스트 어느 형태든 파싱
+    internal fun parseStepField(obj: JSONObject, field: String): List<String> {
+        obj.optJSONArray(field)?.let { arr ->
+            return (0 until arr.length()).map { arr.getString(it) }
+        }
+        val raw = obj.optString(field, "").trim()
+        if (raw.isEmpty() || raw == "null") return emptyList()
+        try {
+            val parsed = JSONArray(raw)
+            val list = (0 until parsed.length()).map { parsed.getString(it) }
+            if (list.isNotEmpty()) return list
+        } catch (_: Exception) { }
+        return raw.split("\n")
+            .map { it.trim().replace(Regex("^\\d+[.)]\\s*"), "") }
+            .filter { it.isNotEmpty() }
+    }
 
     fun deleteSchedule(scheduleId: Int, onResult: (ApiResult<Boolean>) -> Unit) {
         ApiClient.delete("/v1/guardian/schedules/$scheduleId") { result ->

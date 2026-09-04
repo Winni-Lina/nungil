@@ -72,11 +72,12 @@ class ScheduleServiceTest {
         @Override public List<ScheduleVO> findByUser(String id, int idx, String status) { return List.of(); }
         @Override public void updateStatus(Long scheduleId, String status) { }
         @Override public void updateSuccessAt(Long scheduleId) { successAtIds.add(scheduleId); }
-        @Override public void updateScheduledAt(Long scheduleId, LocalDateTime scheduledAt) {
+        @Override public int updateScheduledAt(Long scheduleId, LocalDateTime scheduledAt) {
             ScheduledAtCall c = new ScheduledAtCall(); c.id = scheduleId; c.at = scheduledAt;
             scheduledAtCalls.add(c);
+            return 1;
         }
-        @Override public void deleteById(Long scheduleId) { deletedIds.add(scheduleId); }
+        @Override public int deleteById(Long scheduleId) { deletedIds.add(scheduleId); return 1; }
         @Override public List<ScheduleVO> findTodayPendingByUser(String id, int idx) { return List.of(); }
         @Override public List<ScheduleVO> findOverdue() { return List.of(); }
         @Override public void deleteByGuardianId(String id) { }

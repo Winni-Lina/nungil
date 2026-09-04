@@ -78,6 +78,9 @@ public class AnalysisOrchestrator {
                 aiResult.put("answer", answer);
             }
 
+            // intent 검증: null·공백·허용되지 않은 값은 모두 OTHER로 통일
+            aiResult.put("intent", normalizeIntent(aiResult.get("intent")));
+
             Map<String, Object> result = new HashMap<>(aiResult);
             result.put("userId", userId);
             result.put("transcribedText", question.equals("....") ? "" : question);
@@ -105,6 +108,8 @@ public class AnalysisOrchestrator {
             + "- 위험해 보이면 \"어른에게 말해요\" 하고 알려줘. 약이나 아픈 건 네가 판단하지 마.\n"
             + "- 같은 걸 또 물어도 짜증 내지 말고 똑같이 친절하게.\n"
             + "- 친구의 특이사항을 지켜. (예: 큰 소리를 무서워하면 재촉이나 느낌표를 쓰지 말고 더 부드럽게.)\n\n"
+            + "[intent 값 규칙 — 반드시 아래 중 하나만 선택]\n"
+            + "- OTHER: 자유 대화에서는 항상 OTHER.\n\n"
             + "[필드 의미]\n"
             + "- suggestedQuestions: 보호자가 허락한 일 안에서, 누르기 쉬운 짧은 말 2~3개.\n"
             + "- stepComplete: 자유 질문에서는 항상 false.";
@@ -146,12 +151,19 @@ public class AnalysisOrchestrator {
             + "   → 혼내지 말고 한 번 따뜻하게 받아준 뒤, 지금 단계를 다시 말해줘. stepComplete=false.\n\n"
             + "④ 못 하겠다·하기 싫다·힘들어할 때\n"
             + "   → 재촉하지 말고 응원하면서, 그 행동을 더 잘게 쪼개 다시 말해줘. stepComplete=false.\n\n"
-            + "* 무슨 말인지 애매하면 ②로 보고 짧게 답해줘.\n"
+            + "* 무슨 말인지 애매하면 intent=OTHER로 두고, 지금 단계를 한 번 더 짧게 말해줘. stepComplete=false.\n"
             + "* 같은 걸 또 물어도 짜증 내지 말고 똑같이 친절하게.\n\n"
             + "[그 밖에]\n"
             + "- 새 단계를 처음 말할 땐 answer 끝에 \"다 하면 말해 주세요.\" 를 붙여.\n"
             + "- 친구의 특이사항을 지켜. (예: 큰 소리를 무서워하면 재촉이나 느낌표를 쓰지 말고 더 부드럽게.)\n"
             + "- 위험해 보이면 \"어른에게 말해요\" 하고 알려줘. 약이나 아픈 건 네가 판단하지 마.\n\n"
+            + "[intent 값 규칙 — 반드시 아래 중 하나만 선택]\n"
+            + "- STEP_DONE: \"다 했어\", \"했어\", \"완료\", \"됐어\", \"끝났어\" 등 지금 단계를 마쳤다는 말\n"
+            + "- STEP_QUESTION: 현재 단계 방법·도구·위치 등 과업에 관한 질문\n"
+            + "- HELP_REQUEST: \"모르겠어\", \"힘들어\", \"못 하겠어\" 등 어려움·도움 요청\n"
+            + "- OFF_TOPIC: 일정과 전혀 관계없는 말 (잡담, 노래, 딴 이야기)\n"
+            + "- OTHER: 위에 해당하지 않는 말 또는 분류하기 애매한 말\n"
+            + "- stepComplete는 intent=STEP_DONE일 때만 true. 그 외에는 반드시 false.\n\n"
             + "[필드 의미]\n"
             + "- photoRequest: \"이게 뭐야?\", \"이거 맞아?\" 처럼 사물을 직접 봐야만 답할 수 있을 때만 true. 단계 완료 확인 목적으로는 절대 true 하지 마.\n"
             + "- suggestedQuestions: 일정 수행 중엔 빈 배열([]).";
@@ -172,6 +184,16 @@ public class AnalysisOrchestrator {
         return new String[]{ system, user.toString() };
     }
 
+    /** 허용된 5개 Intent 외의 값(null·공백·오타·소문자)은 모두 OTHER로 통일 */
+    private static final java.util.Set<String> ALLOWED_INTENTS = java.util.Set.of(
+            "STEP_DONE", "STEP_QUESTION", "HELP_REQUEST", "OFF_TOPIC", "OTHER");
+
+    private String normalizeIntent(Object rawIntent) {
+        if (rawIntent == null) return "OTHER";
+        String intent = String.valueOf(rawIntent).trim().toUpperCase();
+        return ALLOWED_INTENTS.contains(intent) ? intent : "OTHER";
+    }
+
     /** historyJson이 비어있거나 파싱 불가면 "(대화 없음)" 반환 */
     private String safeHistory(String historyJson) {
         if (historyJson == null || historyJson.isBlank() || historyJson.equals("[]")) {
@@ -182,7 +204,9 @@ public class AnalysisOrchestrator {
 
     private Map<String, Object> createErrorResponse() {
         Map<String, Object> errorMap = new HashMap<>();
+        errorMap.put("intent", "OTHER");
         errorMap.put("answer", "잠깐, 다시 한 번 말해줄래?");
+        errorMap.put("stepComplete", false);
         errorMap.put("suggestedQuestions", java.util.Arrays.asList("다시 말해볼게요"));
         errorMap.put("photoRequest", false);
         return errorMap;

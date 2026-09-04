@@ -22,10 +22,10 @@ public interface ScheduleMapper {
     void updateSuccessAt(@Param("scheduleId") Long scheduleId);
 
     // SC-007: 드래그로 시간 변경
-    void updateScheduledAt(@Param("scheduleId") Long scheduleId,
-                           @Param("scheduledAt") LocalDateTime scheduledAt);
+    int updateScheduledAt(@Param("scheduleId") Long scheduleId,
+                          @Param("scheduledAt") LocalDateTime scheduledAt);
 
-    void deleteById(@Param("scheduleId") Long scheduleId);
+    int deleteById(@Param("scheduleId") Long scheduleId);
 
     List<ScheduleVO> findTodayPendingByUser(@Param("id") String id, @Param("idx") int idx);
 

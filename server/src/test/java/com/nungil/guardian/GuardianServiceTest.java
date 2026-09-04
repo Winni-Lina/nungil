@@ -160,8 +160,8 @@ class GuardianServiceTest {
         @Override public List<ScheduleVO> findByUser(String id, int idx, String status) { return List.of(); }
         @Override public void updateStatus(Long scheduleId, String status) { }
         @Override public void updateSuccessAt(Long scheduleId) { }
-        @Override public void updateScheduledAt(Long scheduleId, LocalDateTime scheduledAt) { }
-        @Override public void deleteById(Long scheduleId) { }
+        @Override public int updateScheduledAt(Long scheduleId, LocalDateTime scheduledAt) { return 0; }
+        @Override public int deleteById(Long scheduleId) { return 0; }
         @Override public List<ScheduleVO> findTodayPendingByUser(String id, int idx) { return List.of(); }
         @Override public List<ScheduleVO> findOverdue() { return List.of(); }
         @Override public void deleteByGuardianId(String id) { }
