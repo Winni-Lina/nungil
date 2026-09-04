@@ -44,6 +44,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -156,7 +157,15 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         val welcomeMsg = "안녕! 나는 똘똘이야. 뭐든 물어봐!"
         addMsg(welcomeMsg, UserChatMessage.TYPE_OTHER, false, null, mutableListOf("오늘 날씨 어때?", "넌 누구니?"))
         conversationHistory.add(UserChatLog("model", welcomeMsg))
+        saveChatMessage("ASSISTANT", welcomeMsg)
         mainHandler.postDelayed({ ttsManager.speak(welcomeMsg) }, 1000)
+
+        // 앱 재실행 후에도 Gemini가 이전 자유대화 맥락을 참고하도록 DB에서 최근 대화 복원
+        fetchChatHistory("GENERAL", null) { restored ->
+            if (restored.isNotEmpty()) {
+                runOnUiThread { conversationHistory.addAll(0, restored) }
+            }
+        }
 
         loadUserDataFromDB()
         handleScheduleIntent(intent)
@@ -296,7 +305,10 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         }
 
         // 히스토리에 현재 질문 추가 (순수 대화 내용만)
-        if (text != null) conversationHistory.add(UserChatLog("user", text))
+        if (text != null) {
+            conversationHistory.add(UserChatLog("user", text))
+            saveChatMessage("USER", text)
+        }
 
         val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
         val textMt = "text/plain; charset=utf-8".toMediaTypeOrNull()
@@ -342,7 +354,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
 
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string() ?: ""
-                Log.d("ServerCheck", "── 서버 응답 수신 ──\n코드: ${response.code}\n본문: $body\n──────────────────")
+                Log.d("ServerCheck", "서버 응답 수신 | 코드: ${response.code}, 길이: ${body.length}자")
 
                 runOnUiThread {
                     loadingBar.visibility = View.GONE
@@ -374,7 +386,9 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                 if (answer.startsWith("{") && answer.contains("\"answer\"")) {
                     try { answer = JSONObject(answer).optString("answer", answer).trim() } catch (_: Exception) {}
                 }
+                val intent = IntentPolicy.normalize(result.optString("intent", ""))
                 conversationHistory.add(UserChatLog("model", answer))
+                saveChatMessage("ASSISTANT", answer, intent)
 
                 val suggestArray = result.optJSONArray("suggestedQuestions")
                 val suggests = mutableListOf<String?>()
@@ -382,7 +396,6 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     for (i in 0 until suggestArray.length()) suggests.add(suggestArray.getString(i))
                 }
 
-                val intent = IntentPolicy.normalize(result.optString("intent", ""))
                 val stepComplete = result.optBoolean("stepComplete", false)
                 val isDone = IntentPolicy.shouldConfirmStep(intent)
                 if (IntentPolicy.isInconsistent(intent, stepComplete)) {
@@ -459,6 +472,7 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     dismissStepConfirm()
                     val msg = "괜찮아요. 천천히 해요. 다 하면 알려 주세요."
                     addMsg(msg, UserChatMessage.TYPE_OTHER, false, null, null)
+                    saveChatMessage("ASSISTANT", msg)
                     ttsManager.speak(msg)   // TTS 종료 후 handleTtsEndFlow가 음성 인식 재개
                 }
                 .setNegativeButton("도와주세요") { _, _ ->
@@ -666,13 +680,52 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
         currentStepIndex = 0
         Thread {
             val (steps, note) = ScheduleRepository.fetchStepsByScheduleId(currentScheduleId, USER_ID, USER_IDX)
-            runOnUiThread {
-                scheduleSteps = steps
-                scheduleNote = note
-                android.util.Log.d("ScheduleDebug", "단계 로드: ${steps.size}개 → $steps")
-                sendSchedulePromptToAI()
+            // 이 일정으로 이전에 나눈 대화가 있으면 복원해 Gemini가 맥락을 참고하도록 한다
+            fetchChatHistory("SCHEDULE", currentScheduleId) { restored ->
+                runOnUiThread {
+                    scheduleSteps = steps
+                    scheduleNote = note
+                    if (restored.isNotEmpty()) conversationHistory.addAll(0, restored)
+                    android.util.Log.d("ScheduleDebug", "단계 로드: ${steps.size}개 → $steps")
+                    sendSchedulePromptToAI()
+                }
             }
         }.start()
+    }
+
+    /** guardianId/userIdx + chatMode(+scheduleId) 기준으로 서버 CHAT_HISTORY에서 과거 대화를 조회한다. */
+    private fun fetchChatHistory(chatMode: String, scheduleId: Int?, onResult: (List<UserChatLog>) -> Unit) {
+        val urlBuilder = (AppConfig.BASE_URL + "api/v1/chat-history").toHttpUrl().newBuilder()
+            .addQueryParameter("guardianId", USER_ID)
+            .addQueryParameter("userIdx", USER_IDX.toString())
+            .addQueryParameter("chatMode", chatMode)
+        if (scheduleId != null) urlBuilder.addQueryParameter("scheduleId", scheduleId.toString())
+        val request = Request.Builder().url(urlBuilder.build()).get().build()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("ChatHistory", "조회 실패: ${e.message}")
+                onResult(emptyList())
+            }
+            override fun onResponse(call: Call, response: Response) {
+                try {
+                    val root = JSONObject(response.body?.string() ?: "")
+                    if (root.optString("status") != "SUCCESS") {
+                        onResult(emptyList())
+                        return
+                    }
+                    val arr = root.optJSONArray("messages") ?: JSONArray()
+                    val list = (0 until arr.length()).map { i ->
+                        val obj = arr.getJSONObject(i)
+                        val role = if (obj.optString("sender") == "ASSISTANT") "model" else "user"
+                        UserChatLog(role, obj.optString("message", ""))
+                    }
+                    onResult(list)
+                } catch (e: Exception) {
+                    Log.e("ChatHistory", "조회 응답 파싱 실패: ${e.message}")
+                    onResult(emptyList())
+                }
+            }
+        })
     }
 
     private fun sendSchedulePromptToAI() {
@@ -715,6 +768,8 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
     private fun finishSchedule() {
         ScheduleRepository.completeSchedule(currentScheduleId)
         val finishedTitle = scheduleTitle
+        val finishedScheduleId = currentScheduleId
+        val finishedStepIndex = currentStepIndex
         val historyJson = gson.toJson(conversationHistory)
         currentStepIndex = -1; currentScheduleId = -1
         setBearMood(BearMood.PRAISE)
@@ -731,10 +786,52 @@ class UserChatActivity : AppCompatActivity(), ChatAdapter.OnSuggestionClickListe
                     chatList[summaryMsgIndex].content = summary
                     adapter.notifyItemChanged(summaryMsgIndex)
                     conversationHistory.add(UserChatLog("model", summary))
+                    saveChatMessage(
+                        "ASSISTANT", summary,
+                        chatMode = "SCHEDULE",
+                        scheduleId = finishedScheduleId,
+                        stepIndex = finishedStepIndex
+                    )
                     ttsManager.speak(summary)
                 }
             }
         }
+    }
+
+    /** 대화 1건을 서버 CHAT_HISTORY 테이블에 비동기로 저장한다 (실패해도 화면 흐름은 막지 않음). */
+    private fun saveChatMessage(
+        sender: String,
+        message: String,
+        intent: String? = null,
+        chatMode: String = if (isScheduleMode) "SCHEDULE" else "GENERAL",
+        scheduleId: Int = currentScheduleId,
+        stepIndex: Int = currentStepIndex
+    ) {
+        if (message.isBlank()) return
+        val bodyJson = JSONObject().apply {
+            put("guardianId", USER_ID)
+            put("userIdx", USER_IDX)
+            if (chatMode == "SCHEDULE") {
+                put("scheduleId", scheduleId)
+                put("stepIndex", stepIndex)
+            }
+            put("chatMode", chatMode)
+            put("sender", sender)
+            put("message", message)
+            if (intent != null) put("intent", intent)
+        }.toString()
+        val request = Request.Builder()
+            .url(AppConfig.BASE_URL + "api/v1/chat-history")
+            .post(bodyJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+            .build()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("ChatHistory", "저장 실패: ${e.message}")
+            }
+            override fun onResponse(call: Call, response: Response) {
+                response.close()
+            }
+        })
     }
 
     /** 서버에 완료 요약 요청 */

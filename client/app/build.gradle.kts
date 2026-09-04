@@ -77,6 +77,8 @@ dependencies {
 
     // 테스트 및 디버그 관련
     testImplementation("junit:junit:4.13.2")
+    // 순수 JVM 단위테스트에서는 android.jar의 org.json이 스텁(호출 시 예외)이므로 실제 구현체를 사용
+    testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     debugImplementation("androidx.compose.ui:ui-tooling:$composeVersion")

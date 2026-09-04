@@ -4,6 +4,8 @@ import java.util.List;
 
 import org.springframework.stereotype.Service;
 
+import com.nungil.domain.schedule.ScheduleMapper;
+
 /**
  * 대화 History 저장/조회 서비스.
  *  - 저장 전 입력값을 검증한다 (허용값·필수값). 잘못된 요청은 IllegalArgumentException.
@@ -13,9 +15,11 @@ import org.springframework.stereotype.Service;
 public class ChatHistoryService {
 
     private final ChatHistoryMapper chatHistoryMapper;
+    private final ScheduleMapper scheduleMapper;
 
-    public ChatHistoryService(ChatHistoryMapper chatHistoryMapper) {
+    public ChatHistoryService(ChatHistoryMapper chatHistoryMapper, ScheduleMapper scheduleMapper) {
         this.chatHistoryMapper = chatHistoryMapper;
+        this.scheduleMapper = scheduleMapper;
     }
 
     /** 대화 1건 저장. 검증 실패 시 IllegalArgumentException(사유). */
@@ -51,8 +55,13 @@ public class ChatHistoryService {
             throw new IllegalArgumentException("message must not be empty");
         }
 
-        if ("SCHEDULE".equals(mode) && vo.getScheduleId() == null) {
-            throw new IllegalArgumentException("scheduleId is required for SCHEDULE chat");
+        if ("SCHEDULE".equals(mode)) {
+            if (vo.getScheduleId() == null) {
+                throw new IllegalArgumentException("scheduleId is required for SCHEDULE chat");
+            }
+            if (scheduleMapper.findById(vo.getScheduleId()) == null) {
+                throw new IllegalArgumentException("scheduleId does not exist: " + vo.getScheduleId());
+            }
         }
     }
 
